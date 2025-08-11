@@ -88,6 +88,15 @@ jspm_packages/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.prod
+env.prod.*
+
+# Docker compose files for specific clients
+docker-compose.*.yml
+
+# Client-specific logs and backups
+logs/
+backup/
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
