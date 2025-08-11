@@ -1,0 +1,30 @@
+[project]
+name = "sistema-quiosque"
+version = "1.0.0"
+description = "Sistema completo de gerenciamento de pedidos para quiosques"
+authors = [
+    {name = "Jeferson Santos", email = "jeferson.santos@netbr.com.br"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+license = {text = "Proprietary"}
+
+[project.urls]
+Homepage = "https://github.com/seu-usuario/sistema-quiosque"
+Repository = "https://github.com/seu-usuario/sistema-quiosque.git"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+
+[tool.black]
+line-length = 88
+target-version = ['py313']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 88

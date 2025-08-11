@@ -1,0 +1,63 @@
+[tool.poetry]
+name = "pedidos-quiosque"
+version = "0.1.0"
+description = ""
+authors = ["Jeferson Santos <jeferson.santos@netbr.com.br>"]
+
+packages = [
+  { include = "app" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.13"
+fastapi = ">=0.116.1,<0.117.0"
+uvicorn = {extras = ["standard"], version = ">=0.35.0,<0.36.0"}
+sqlalchemy = ">=2.0.41,<3.0.0"
+asyncpg = ">=0.30.0,<0.31.0"
+passlib = {extras = ["bcrypt"], version = ">=1.7.4,<2.0.0"}
+bcrypt = "^4.3.0"
+python-jose = {extras = ["cryptography"], version = ">=3.5.0,<4.0.0"}
+pydantic-settings = "^2.10.1"
+python-multipart = "^0.0.20"
+loguru = "^0.7.2"
+fastapi-cors = "^0.0.6"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+httpx = "^0.28.1"
+black = "^25.1.0"
+isort = "^6.0.1"
+pytest-asyncio = "^1.0.0"
+asgi-lifespan = "^2.1.0"
+pylint = "^3.3.7"
+alembic = "^1.16.4"
+
+[tool.black]
+line-length = 88
+target-version = ['py313']
+include = '\.pyi?$'
+exclude = '''
+/(
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["app"]
+default_section = "THIRDPARTY"
+skip = ["venv", ".venv"]
+
+[tool.poetry.scripts]
+format = "scripts.format_code:main"
+dev = "scripts.run_dev:main"

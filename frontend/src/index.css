@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* Variáveis CSS para estilos de letras */
+:root {
+  --font-family: 'Inter, system-ui, sans-serif';
+  --font-size-base: '16px';
+  --font-weight-normal: '400';
+  --font-weight-bold: '700';
+  --line-height: '1.5';
+  --letter-spacing: '0.025em';
+}
+
+/* Aplicação dos estilos globais */
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height);
+  letter-spacing: var(--letter-spacing);
+  overflow-x: hidden; /* Previne scroll horizontal global */
+}
+
+/* Previne overflow horizontal em toda a aplicação */
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Garante que o container principal não cause overflow */
+#root {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
