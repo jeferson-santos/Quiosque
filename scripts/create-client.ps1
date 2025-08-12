@@ -48,8 +48,8 @@ function Generate-SecretKey {
 
 # Funcao para criar arquivo de ambiente
 function Create-EnvironmentFile {
-    $envFile = "env.prod.$ClientId"
-    $templateFile = "env.prod"
+    $envFile = ".env"
+    $templateFile = "env.prod.example"
     
     if (-not (Test-Path $templateFile)) {
         Write-Host "ERRO: Arquivo env.prod nao encontrado!" -ForegroundColor Red
@@ -157,7 +157,16 @@ services:
   backend_${ClientId}:
     build: ./backend
     container_name: quiosque_backend_${ClientId}
-    env_file: env.prod.${ClientId}
+    environment:
+      - DATABASE_URL=`${DATABASE_URL}
+      - SECRET_KEY=`${SECRET_KEY}
+      - ALGORITHM=`${ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=`${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REDIS_HOST=`${REDIS_HOST}
+      - REDIS_PORT=`${REDIS_PORT}
+      - REDIS_PASSWORD=`${REDIS_PASSWORD}
+      - CORS_ORIGINS=`${CORS_ORIGINS}
+      - CORS_ALLOW_CREDENTIALS=`${CORS_ALLOW_CREDENTIALS}
     ports:
       - "`${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -173,7 +182,6 @@ services:
   frontend_${ClientId}:
     build: ./frontend
     container_name: quiosque_frontend_${ClientId}
-    env_file: env.prod.${ClientId}
     ports:
       - "`${FRONTEND_PORT:-80}:80"
     depends_on:
@@ -211,8 +219,8 @@ function Create-DeployScript {
 Write-Host "Iniciando deploy para cliente: ${ClientName}" -ForegroundColor Green
 
 # Verificar se os arquivos existem
-if (-not (Test-Path "env.prod.${ClientId}")) {
-    Write-Host "ERRO: Arquivo env.prod.${ClientId} nao encontrado!" -ForegroundColor Red
+if (-not (Test-Path ".env")) {
+    Write-Host "ERRO: Arquivo .env nao encontrado!" -ForegroundColor Red
     exit 1
 }
 
@@ -302,7 +310,7 @@ function Main {
         Write-Host "`nCLIENTE CRIADO COM SUCESSO!" -ForegroundColor Green
         Write-Host "========================================" -ForegroundColor Green
         Write-Host "Arquivos criados:" -ForegroundColor Blue
-        Write-Host "   • $($envInfo.EnvFile)" -ForegroundColor Cyan
+                 Write-Host "   • .env" -ForegroundColor Cyan
         Write-Host "   • $composeFile" -ForegroundColor Cyan
         Write-Host "   • $deployScript" -ForegroundColor Cyan
         
@@ -316,7 +324,7 @@ function Main {
         
         Write-Host "`nIMPORTANTE:" -ForegroundColor Yellow
         Write-Host "   • Salve as credenciais em local seguro" -ForegroundColor Yellow
-        Write-Host "   • Nunca commite o arquivo env.prod.$ClientId no Git" -ForegroundColor Yellow
+                 Write-Host "   • Nunca commite o arquivo .env no Git" -ForegroundColor Yellow
         Write-Host "   • Configure as portas no arquivo de ambiente se necessario" -ForegroundColor Yellow
         
     } catch {

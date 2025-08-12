@@ -52,8 +52,8 @@ validate_input() {
 
 # Função para criar arquivo de ambiente
 create_environment_file() {
-    local env_file="env.prod.$CLIENT_ID"
-    local template_file="env.prod"
+    local env_file=".env"
+    local template_file="env.prod.example"
     
     if [[ ! -f "$template_file" ]]; then
         log_color $RED "❌ Arquivo env.prod não encontrado!"
@@ -119,7 +119,7 @@ create_environment_file() {
     
     # Salvar arquivo
     echo "$content" > "$env_file"
-    log_color $GREEN "✅ Arquivo de ambiente criado: $env_file"
+    log_color $GREEN "✅ Arquivo de ambiente criado: .env"
     
     # Retornar informações
     ENV_FILE="$env_file"
@@ -169,7 +169,16 @@ services:
   backend_$CLIENT_ID:
     build: ./backend
     container_name: quiosque_backend_$CLIENT_ID
-    env_file: env.prod.$CLIENT_ID
+    environment:
+      - DATABASE_URL=\${DATABASE_URL}
+      - SECRET_KEY=\${SECRET_KEY}
+      - ALGORITHM=\${ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=\${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REDIS_HOST=\${REDIS_HOST}
+      - REDIS_PORT=\${REDIS_PORT}
+      - REDIS_PASSWORD=\${REDIS_PASSWORD}
+      - CORS_ORIGINS=\${CORS_ORIGINS}
+      - CORS_ALLOW_CREDENTIALS=\${CORS_ALLOW_CREDENTIALS}
     ports:
       - "\${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -185,7 +194,6 @@ services:
   frontend_$CLIENT_ID:
     build: ./frontend
     container_name: quiosque_frontend_$CLIENT_ID
-    env_file: env.prod.$CLIENT_ID
     ports:
       - "\${FRONTEND_PORT:-80}:80"
     depends_on:

@@ -130,7 +130,7 @@ public
 # ARQUIVOS DE CONFIGURAÇÃO DO CLIENTE
 # ========================================
 # IMPORTANTE: Nunca commitar arquivos de ambiente específicos do cliente
-env.prod.*
+.env
 docker-compose.*.yml
 deploy-*.ps1
 deploy-*.sh
