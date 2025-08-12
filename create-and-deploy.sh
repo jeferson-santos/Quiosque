@@ -35,15 +35,16 @@ show_help() {
     echo "OPÇÕES OPCIONAIS:"
     echo "  -d, --domain DOMAIN    Domínio (ex: 'exemplo.com')"
     echo "  -r, --restaurant NAME  Nome do restaurante (ex: 'Restaurante Exemplo Ltda')"
+    echo "  -e, --email EMAIL      Email para SSL (ex: 'admin@exemplo.com')"
     echo "  -p, --ports            Configurar portas personalizadas"
     echo "  -h, --help             Mostrar esta ajuda"
     echo
     echo "EXEMPLOS:"
     echo "  $0 -n 'Bater Do Mar' -i 'bater_do_mar'"
-    echo "  $0 -n 'Sabor Brasileiro' -i 'saborbrasileiro' -d 'saborbrasileiro.com'"
-    echo "  $0 -n 'Meu Restaurante' -i 'meurestaurante' -r 'Meu Restaurante Ltda' -d 'meurestaurante.com'"
+    echo "  $0 -n 'Sabor Brasileiro' -i 'saborbrasileiro' -d 'saborbrasileiro.com' -e 'admin@saborbrasileiro.com'"
+    echo "  $0 -n 'Meu Restaurante' -i 'meurestaurante' -r 'Meu Restaurante Ltda' -d 'meurestaurante.com' -e 'admin@meurestaurante.com'"
     echo
-    echo "📚 Para deploy em VPS Ubuntu, use: docs/deploy-vps-example.sh"
+    echo "📚 Para deploy em VPS Ubuntu, use: scripts/setup-vps-complete.sh"
     echo
 }
 
@@ -289,6 +290,42 @@ deploy_client() {
     log_color $BLUE "📝 Redis: localhost:\${REDIS_PORT:-6379}"
 }
 
+# Função para deploy automático do subdomínio
+deploy_subdomain() {
+    local client_id="$1"
+    local client_name="$2"
+    local domain="$3"
+    local email="$4"
+    
+    log_color $BLUE "🌐 Iniciando deploy automático do subdomínio..."
+    
+    # Verificar se o script de deploy do subdomínio existe
+    if [ -f "scripts/deploy-subdomain.sh" ]; then
+        log_color $BLUE "📥 Script de deploy do subdomínio encontrado"
+        
+        # Tornar executável
+        chmod +x scripts/deploy-subdomain.sh
+        
+        # Obter porta do frontend do arquivo .env
+        local frontend_port=$(grep "^FRONTEND_PORT=" .env | cut -d'=' -f2 || echo "80")
+        
+        log_color $BLUE "🔧 Configurando subdomínio: ${client_id}.${domain}"
+        log_color $BLUE "🔌 Porta detectada: ${frontend_port}"
+        
+        # Executar script de deploy do subdomínio
+        if sudo scripts/deploy-subdomain.sh -d "$domain" -s "$client_id" -p "$frontend_port" -e "$email"; then
+            log_color $GREEN "✅ Deploy do subdomínio concluído com sucesso!"
+            log_color $GREEN "🌐 Acesse: https://${client_id}.${domain}"
+        else
+            log_color $YELLOW "⚠️ Deploy do subdomínio falhou, mas o cliente foi criado"
+            log_color $YELLOW "🔧 Execute manualmente: sudo scripts/deploy-subdomain.sh -d '$domain' -s '$client_id' -p '$frontend_port' -e '$email'"
+        fi
+    else
+        log_color $YELLOW "⚠️ Script de deploy do subdomínio não encontrado"
+        log_color $YELLOW "📥 Baixe o script: scripts/deploy-subdomain.sh"
+    fi
+}
+
 # Função para mostrar resumo final
 show_summary() {
     local client_name="$1"
@@ -332,6 +369,7 @@ main() {
     local CLIENT_ID=""
     local DOMAIN=""
     local RESTAURANT_NAME=""
+    local EMAIL=""
     
     # Verificar se há argumentos
     if [[ $# -eq 0 ]]; then
@@ -356,6 +394,10 @@ main() {
                 ;;
             -r|--restaurant)
                 RESTAURANT_NAME="$2"
+                shift 2
+                ;;
+            -e|--email)
+                EMAIL="$2"
                 shift 2
                 ;;
             -h|--help)
@@ -419,6 +461,18 @@ main() {
     
     # Fazer deploy
     deploy_client "$CLIENT_ID" "$CLIENT_NAME"
+    
+    # Deploy automático do subdomínio se domínio e email foram fornecidos
+    if [[ -n "$DOMAIN" && -n "$EMAIL" ]]; then
+        log_color $BLUE "🌐 Domínio e email fornecidos, iniciando deploy automático do subdomínio..."
+        deploy_subdomain "$CLIENT_ID" "$CLIENT_NAME" "$DOMAIN" "$EMAIL"
+    else
+        log_color $YELLOW "⚠️ Domínio ou email não fornecidos, deploy do subdomínio será manual"
+        if [[ -n "$DOMAIN" ]]; then
+            log_color $BLUE "🔧 Para configurar subdomínio manualmente:"
+            log_color $BLUE "   sudo scripts/deploy-subdomain.sh -d '$DOMAIN' -s '$CLIENT_ID' -e 'seu_email@exemplo.com'"
+        fi
+    fi
     
     # Mostrar resumo final
     show_summary "$CLIENT_NAME" "$CLIENT_ID"

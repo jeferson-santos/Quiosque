@@ -7,9 +7,11 @@ Esta pasta contém scripts automatizados para deploy completo do Sistema de Quio
 ### **Scripts Disponíveis:**
 
 1. **`deploy-vps.sh`** - Deploy básico da VPS (Docker, usuários, diretórios)
-2. **`setup-nginx-subdomains.sh`** - Configuração do Nginx com subdomínios
-3. **`setup-ssl.sh`** - Configuração SSL/HTTPS com Let's Encrypt
-4. **`deploy-vps-complete.sh`** - **SCRIPT PRINCIPAL** que orquestra todo o processo
+2. **`setup-vps-complete.sh`** - **CONFIGURAÇÃO COMPLETA DA VPS** (Docker, Nginx, SSL para domínio principal)
+3. **`deploy-subdomain.sh`** - **DEPLOY DE SUBDOMÍNIOS** (Nginx, SSL para restaurantes individuais)
+4. **`setup-nginx-subdomains.sh`** - Configuração do Nginx com múltiplos subdomínios (legado)
+5. **`setup-ssl.sh`** - Configuração SSL/HTTPS com Let's Encrypt (legado)
+6. **`deploy-vps-complete.sh`** - Script completo que orquestra todo o processo (legado)
 
 ### **Funcionalidades Completas:**
 
@@ -37,33 +39,35 @@ Esta pasta contém scripts automatizados para deploy completo do Sistema de Quio
 
 ### Execução
 
+#### **Opção 1: Configuração Completa da VPS (RECOMENDADO)**
 ```bash
 # 1. Tornar executável
-chmod +x scripts/deploy-vps-complete.sh
+chmod +x scripts/setup-vps-complete.sh
 
 # 2. Executar como root (OBRIGATÓRIO)
-sudo ./scripts/deploy-vps-complete.sh \
+sudo ./scripts/setup-vps-complete.sh \
   -d "meudominio.com" \
-  -s "bater_do_mar,saborbrasileiro,cantinho_mineiro" \
   -e "admin@meudominio.com"
 ```
 
-#### **Opção 2: Scripts Individuais**
+#### **Opção 2: Deploy de Subdomínios Individuais**
 ```bash
-# 1. Deploy básico da VPS
-chmod +x scripts/deploy-vps.sh
-sudo ./scripts/deploy-vps.sh
+# 1. Tornar executável
+chmod +x scripts/deploy-subdomain.sh
 
-# 2. Configurar Nginx com subdomínios
-chmod +x scripts/setup-nginx-subdomains.sh
-sudo ./scripts/setup-nginx-subdomains.sh \
+# 2. Executar como root (OBRIGATÓRIO)
+sudo ./scripts/deploy-subdomain.sh \
   -d "meudominio.com" \
-  -s "bater_do_mar,saborbrasileiro" \
-  -p "80,8080"
+  -s "bater_do_mar" \
+  -p "80" \
+  -e "admin@meudominio.com"
+```
 
-# 3. Configurar SSL
-chmod +x scripts/setup-ssl.sh
-sudo ./scripts/setup-ssl.sh \
+#### **Opção 3: Scripts Legados (NÃO RECOMENDADO)**
+```bash
+# Scripts antigos para compatibilidade
+chmod +x scripts/deploy-vps-complete.sh
+sudo ./scripts/deploy-vps-complete.sh \
   -d "meudominio.com" \
   -s "bater_do_mar,saborbrasileiro" \
   -e "admin@meudominio.com"
