@@ -1,8 +1,17 @@
-# Script de Deploy para VPS Ubuntu
+# Scripts de Deploy para VPS Ubuntu
 
 ## 📋 Descrição
 
-Este script automatiza todo o processo de deploy do Sistema de Quiosque em uma VPS Ubuntu, incluindo:
+Esta pasta contém scripts automatizados para deploy completo do Sistema de Quiosque em VPS Ubuntu, incluindo:
+
+### **Scripts Disponíveis:**
+
+1. **`deploy-vps.sh`** - Deploy básico da VPS (Docker, usuários, diretórios)
+2. **`setup-nginx-subdomains.sh`** - Configuração do Nginx com subdomínios
+3. **`setup-ssl.sh`** - Configuração SSL/HTTPS com Let's Encrypt
+4. **`deploy-vps-complete.sh`** - **SCRIPT PRINCIPAL** que orquestra todo o processo
+
+### **Funcionalidades Completas:**
 
 - Instalação de ferramentas essenciais
 - Configuração de firewall (UFW)
@@ -11,8 +20,11 @@ Este script automatiza todo o processo de deploy do Sistema de Quiosque em uma V
 - Configuração de diretórios
 - Clone do repositório
 - Configuração do ambiente
-- Criação de cliente
-- Deploy automático da aplicação
+- **Nginx com subdomínios para múltiplos restaurantes**
+- **SSL/HTTPS automático para todos os subdomínios**
+- **Criação automática de clientes**
+- **Backup automático configurado**
+- **Monitoramento automático configurado**
 
 ## 🚀 Como Usar
 
@@ -27,14 +39,34 @@ Este script automatiza todo o processo de deploy do Sistema de Quiosque em uma V
 
 ```bash
 # 1. Tornar executável
-chmod +x scripts/deploy-vps.sh
+chmod +x scripts/deploy-vps-complete.sh
 
 # 2. Executar como root (OBRIGATÓRIO)
+sudo ./scripts/deploy-vps-complete.sh \
+  -d "meudominio.com" \
+  -s "bater_do_mar,saborbrasileiro,cantinho_mineiro" \
+  -e "admin@meudominio.com"
+```
+
+#### **Opção 2: Scripts Individuais**
+```bash
+# 1. Deploy básico da VPS
+chmod +x scripts/deploy-vps.sh
 sudo ./scripts/deploy-vps.sh
 
-# OU mudar para root primeiro
-sudo su
-./scripts/deploy-vps.sh
+# 2. Configurar Nginx com subdomínios
+chmod +x scripts/setup-nginx-subdomains.sh
+sudo ./scripts/setup-nginx-subdomains.sh \
+  -d "meudominio.com" \
+  -s "bater_do_mar,saborbrasileiro" \
+  -p "80,8080"
+
+# 3. Configurar SSL
+chmod +x scripts/setup-ssl.sh
+sudo ./scripts/setup-ssl.sh \
+  -d "meudominio.com" \
+  -s "bater_do_mar,saborbrasileiro" \
+  -e "admin@meudominio.com"
 ```
 
 ### ⚠️ IMPORTANTE
