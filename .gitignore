@@ -136,6 +136,9 @@ deploy-*.ps1
 deploy-*.sh
 README-*.md
 
+# EXCEÇÃO: Scripts de exemplo na pasta docs são permitidos
+!docs/deploy-*.sh
+
 # ========================================
 # DOCKER E CONTAINERS
 # ========================================
