@@ -26,7 +26,7 @@ Sistema completo de gerenciamento de pedidos para restaurantes e quiosques, com 
 - **Backend**: FastAPI, SQLAlchemy, PostgreSQL, Redis
 - **Frontend**: React 19, TypeScript, Material-UI, Vite
 - **Infraestrutura**: Docker, Docker Compose
-- **Automação**: Scripts PowerShell/Bash para criação de clientes
+- **Automação**: Script unificado para criação e deploy automático
 
 ## 📋 **Pré-requisitos**
 
@@ -42,22 +42,22 @@ git clone <seu-repositorio>
 cd Quiosque
 ```
 
-### **2. Criar um novo cliente**
-```powershell
-# Windows
-.\scripts\create-client.ps1 -ClientName "Meu Restaurante" -ClientId "restaurante1" -Domain "meurestaurante.com"
-
+### **2. Criar cliente e fazer deploy automaticamente**
+```bash
 # Linux/Mac
-./scripts/create-client.sh "Meu Restaurante" "restaurante1" "meurestaurante.com"
+./create-and-deploy.sh -n "Meu Restaurante" -i "restaurante1"
+
+# Com opções adicionais
+./create-and-deploy.sh \
+  -n "Meu Restaurante" \
+  -i "restaurante1" \
+  -d "meurestaurante.com" \
+  -r "Meu Restaurante Ltda"
 ```
 
-### **3. Deploy automático**
-```powershell
-# Windows
-.\deploy-restaurante1.ps1
-
-# Linux/Mac
-docker-compose -f docker-compose.restaurante1.yml up -d
+### **3. Para deploy em VPS Ubuntu**
+```bash
+./docs/deploy-vps-example.sh
 ```
 
 ### **4. Acessar o sistema**
@@ -89,9 +89,11 @@ Quiosque/
 │   ├── src/                # Código fonte
 │   ├── package.json        # Dependências Node.js
 │   └── Dockerfile         # Container do frontend
-├── scripts/                # Scripts de automação
-│   ├── create-client.ps1  # Criação de clientes (Windows)
-│   └── create-client.sh   # Criação de clientes (Linux/Mac)
+├── docs/                   # Documentação
+│   ├── DEPLOY_VPS_UBUNTU.md  # Guia completo para VPS Ubuntu
+│   ├── deploy-vps-example.sh # Script automatizado para VPS
+│   └── README_SCRIPTS.md     # Instruções dos scripts
+├── create-and-deploy.sh    # Script unificado para criação e deploy
 ├── docker-compose.example.yml  # Exemplo de configuração
 └── env.prod.example       # Template de ambiente (backend + frontend)
 ```
@@ -99,27 +101,24 @@ Quiosque/
 ## 🎯 **Criação de Clientes**
 
 ### **Comando Completo**
-```powershell
-.\scripts\create-client.ps1 `
-  -ClientName "Restaurante Exemplo" `
-  -ClientId "exemplo" `
-  -Domain "exemplo.com" `
-  -RestaurantName "Restaurante Exemplo Ltda" `
-  -SkipConfirmation
+```bash
+./create-and-deploy.sh \
+  -n "Restaurante Exemplo" \
+  -i "exemplo" \
+  -d "exemplo.com" \
+  -r "Restaurante Exemplo Ltda"
 ```
 
 ### **Parâmetros**
-- `ClientName`: Nome completo do cliente
-- `ClientId`: ID único (sem espaços)
-- `Domain`: Domínio do cliente
-- `RestaurantName`: Nome do restaurante
-- `SkipConfirmation`: Pular confirmação
+- `-n, --name`: Nome completo do cliente
+- `-i, --id`: ID único (sem espaços)
+- `-d, --domain`: Domínio do cliente (opcional)
+- `-r, --restaurant`: Nome do restaurante (opcional)
 
 ### **Arquivos Gerados**
-- `env.prod.<client_id>` - Configurações do cliente
+- `.env` - Configurações do cliente
 - `docker-compose.<client_id>.yml` - Docker Compose
-- `deploy-<client_id>.ps1` - Script de deploy
-- `README-<client_id>.md` - Documentação específica
+- **Deploy automático** - Não precisa de script separado
 
 ## 🌐 **Portas Padrão**
 
@@ -147,22 +146,23 @@ Quiosque/
 
 ## 🚀 **Deploy em Produção**
 
-### **1. Configurar domínio**
+### **1. Deploy Local (Desenvolvimento)**
 ```bash
-# Editar env.prod.<client_id>
+# Cria cliente e faz deploy automaticamente
+./create-and-deploy.sh -n "Meu Restaurante" -i "meurestaurante"
+```
+
+### **2. Deploy em VPS Ubuntu (Produção)**
+```bash
+# Usar script automatizado para VPS
+./docs/deploy-vps-example.sh
+```
+
+### **3. Configurar domínio e SSL**
+```bash
+# Editar .env
 CORS_ORIGINS=https://seudominio.com,https://www.seudominio.com
-```
-
-### **2. Configurar SSL (opcional)**
-```bash
-# Adicionar certificados no nginx
-SSL_CERT_FILE=/etc/nginx/ssl/cert.pem
-SSL_KEY_FILE=/etc/nginx/ssl/key.pem
-```
-
-### **3. Deploy**
-```bash
-./deploy-<client_id>.ps1
+VITE_API_BASE_URL=https://api.seudominio.com
 ```
 
 ## 🐛 **Troubleshooting**
@@ -174,6 +174,9 @@ docker exec -it quiosque_backend_<client_id> env | grep POSTGRES
 
 # Verificar logs
 docker logs quiosque_backend_<client_id>
+
+# Verificar se PostgreSQL está saudável
+docker exec -it quiosque_postgres_<client_id> pg_isready
 ```
 
 ### **Frontend não carrega**
