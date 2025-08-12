@@ -57,7 +57,7 @@ cd Quiosque
 
 ### **3. Para deploy em VPS Ubuntu**
 ```bash
-./docs/deploy-vps-example.sh
+./scripts/deploy-vps.sh
 ```
 
 ### **4. Acessar o sistema**
@@ -89,10 +89,9 @@ Quiosque/
 │   ├── src/                # Código fonte
 │   ├── package.json        # Dependências Node.js
 │   └── Dockerfile         # Container do frontend
-├── docs/                   # Documentação
-│   ├── DEPLOY_VPS_UBUNTU.md  # Guia completo para VPS Ubuntu
-│   ├── deploy-vps-example.sh # Script automatizado para VPS
-│   └── README_SCRIPTS.md     # Instruções dos scripts
+├── scripts/                 # Scripts de automação
+│   ├── deploy-vps.sh        # Script automatizado para VPS Ubuntu
+│   └── README.md            # Documentação do script de deploy
 ├── create-and-deploy.sh    # Script unificado para criação e deploy
 ├── docker-compose.example.yml  # Exemplo de configuração
 └── env.prod.example       # Template de ambiente (backend + frontend)
@@ -155,7 +154,7 @@ Quiosque/
 ### **2. Deploy em VPS Ubuntu (Produção)**
 ```bash
 # Usar script automatizado para VPS
-./docs/deploy-vps-example.sh
+./scripts/deploy-vps.sh
 ```
 
 ### **3. Configurar domínio e SSL**
