@@ -6,12 +6,8 @@ Esta pasta contém scripts automatizados para deploy completo do Sistema de Quio
 
 ### **Scripts Disponíveis:**
 
-1. **`deploy-vps.sh`** - Deploy básico da VPS (Docker, usuários, diretórios)
-2. **`setup-vps-complete.sh`** - **CONFIGURAÇÃO COMPLETA DA VPS** (Docker, Nginx, SSL para domínio principal)
-3. **`deploy-subdomain.sh`** - **DEPLOY DE SUBDOMÍNIOS** (Nginx, SSL para restaurantes individuais)
-4. **`setup-nginx-subdomains.sh`** - Configuração do Nginx com múltiplos subdomínios (legado)
-5. **`setup-ssl.sh`** - Configuração SSL/HTTPS com Let's Encrypt (legado)
-6. **`deploy-vps-complete.sh`** - Script completo que orquestra todo o processo (legado)
+1. **`setup-vps.sh`** - **CONFIGURAÇÃO COMPLETA DA VPS** (Docker, Nginx, SSL para domínio principal)
+2. **`deploy-subdomain.sh`** - **DEPLOY DE SUBDOMÍNIOS** (Nginx, SSL para restaurantes individuais)
 
 ### **Funcionalidades Completas:**
 
@@ -42,10 +38,10 @@ Esta pasta contém scripts automatizados para deploy completo do Sistema de Quio
 #### **Opção 1: Configuração Completa da VPS (RECOMENDADO)**
 ```bash
 # 1. Tornar executável
-chmod +x scripts/setup-vps-complete.sh
+chmod +x scripts/setup-vps.sh
 
 # 2. Executar como root (OBRIGATÓRIO)
-sudo ./scripts/setup-vps-complete.sh \
+sudo ./scripts/setup-vps.sh \
   -d "meudominio.com" \
   -e "admin@meudominio.com"
 ```
@@ -63,15 +59,7 @@ sudo ./scripts/deploy-subdomain.sh \
   -e "admin@meudominio.com"
 ```
 
-#### **Opção 3: Scripts Legados (NÃO RECOMENDADO)**
-```bash
-# Scripts antigos para compatibilidade
-chmod +x scripts/deploy-vps-complete.sh
-sudo ./scripts/deploy-vps-complete.sh \
-  -d "meudominio.com" \
-  -s "bater_do_mar,saborbrasileiro" \
-  -e "admin@meudominio.com"
-```
+
 
 ### ⚠️ IMPORTANTE
 
