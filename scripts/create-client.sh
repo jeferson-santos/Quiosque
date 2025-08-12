@@ -74,7 +74,7 @@ create_environment_file() {
     content=$(echo "$content" | sed "s/CLIENT_NAME=.*/CLIENT_NAME=$CLIENT_NAME/")
     content=$(echo "$content" | sed "s/CLIENT_ID=.*/CLIENT_ID=$CLIENT_ID/")
     content=$(echo "$content" | sed "s/POSTGRES_DB=.*/POSTGRES_DB=quiosque_$CLIENT_ID/")
-    content=$(echo "$content" | sed "s/POSTGRES_USER=.*/POSTGRES_USER=quiosque_${CLIENT_ID}_user/")
+    content=$(echo "$content" | sed "s/POSTGRES_USER=.*/POSTGRES_USER=quiosque_$CLIENT_ID/")
     content=$(echo "$content" | sed "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$db_password/")
     content=$(echo "$content" | sed "s/SECRET_KEY=.*/SECRET_KEY=$secret_key/")
     content=$(echo "$content" | sed "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=$redis_password/")
@@ -101,7 +101,20 @@ create_environment_file() {
     fi
     
     if [[ -n "$DOMAIN" ]]; then
+        # Configurar CORS para o domínio do cliente
         content=$(echo "$content" | sed "s|CORS_ORIGINS=.*|CORS_ORIGINS=https://$DOMAIN,https://www.$DOMAIN|")
+        
+        # Configurar URL da API para o domínio do cliente
+        local api_url="https://api.$DOMAIN"
+        content=$(echo "$content" | sed "s|VITE_API_BASE_URL=.*|VITE_API_BASE_URL=$api_url|")
+        
+        # Configurar CORS do frontend para o domínio do cliente
+        local frontend_cors="https://$DOMAIN,https://www.$DOMAIN"
+        content=$(echo "$content" | sed "s|VITE_CORS_ORIGINS=.*|VITE_CORS_ORIGINS=$frontend_cors|")
+    else
+        # Para desenvolvimento local, usar localhost
+        content=$(echo "$content" | sed "s|VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://localhost:8000|")
+        content=$(echo "$content" | sed "s|VITE_CORS_ORIGINS=.*|VITE_CORS_ORIGINS=http://localhost:80,http://localhost:3000|")
     fi
     
     # Salvar arquivo
@@ -131,7 +144,7 @@ services:
     container_name: quiosque_postgres_$CLIENT_ID
     environment:
       POSTGRES_DB: quiosque_$CLIENT_ID
-      POSTGRES_USER: quiosque_${CLIENT_ID}_user
+      POSTGRES_USER: quiosque_$CLIENT_ID
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
     ports:
       - "\${POSTGRES_PORT:-5432}:5432"

@@ -75,6 +75,10 @@ function Create-EnvironmentFile {
     $content = $content -replace 'SECRET_KEY=.*', "SECRET_KEY=$secretKey"
     $content = $content -replace 'REDIS_PASSWORD=.*', "REDIS_PASSWORD=$redisPassword"
     
+    # Substituicoes de host e porta
+    $content = $content -replace 'POSTGRES_HOST=.*', "POSTGRES_HOST=postgres_${ClientId}"
+    $content = $content -replace 'REDIS_HOST=.*', "REDIS_HOST=redis_${ClientId}"
+    
     # Adicionar DATABASE_URL
     $content = $content -replace 'DATABASE_URL=.*', "DATABASE_URL=postgresql://quiosque_${ClientId}:$dbPassword@postgres_${ClientId}:5432/quiosque_${ClientId}"
     
@@ -83,24 +87,21 @@ function Create-EnvironmentFile {
         $content = $content -replace 'RESTAURANT_NAME=.*', "RESTAURANT_NAME=$RestaurantName"
     }
     
-    if ($RestaurantAddress) {
-        $content = $content -replace 'RESTAURANT_ADDRESS=.*', "RESTAURANT_ADDRESS=$RestaurantAddress"
-    }
-    
-    if ($RestaurantPhone) {
-        $content = $content -replace 'RESTAURANT_PHONE=.*', "RESTAURANT_PHONE=$RestaurantPhone"
-    }
-    
-    if ($RestaurantEmail) {
-        $content = $content -replace 'RESTAURANT_EMAIL=.*', "RESTAURANT_EMAIL=$RestaurantEmail"
-    }
-    
-    if ($RestaurantCNPJ) {
-        $content = $content -replace 'RESTAURANT_CNPJ=.*', "RESTAURANT_CNPJ=$RestaurantCNPJ"
-    }
-    
     if ($Domain) {
+        # Configurar CORS para o domínio do cliente
         $content = $content -replace 'CORS_ORIGINS=.*', "CORS_ORIGINS=https://$Domain,https://www.$Domain"
+        
+        # Configurar URL da API para o domínio do cliente
+        $apiUrl = "https://api.$Domain"
+        $content = $content -replace 'VITE_API_BASE_URL=.*', "VITE_API_BASE_URL=$apiUrl"
+        
+        # Configurar CORS do frontend para o domínio do cliente
+        $frontendCors = "https://$Domain,https://www.$Domain"
+        $content = $content -replace 'VITE_CORS_ORIGINS=.*', "VITE_CORS_ORIGINS=$frontendCors"
+    } else {
+        # Para desenvolvimento local, usar localhost
+        $content = $content -replace 'VITE_API_BASE_URL=.*', "VITE_API_BASE_URL=http://localhost:8000"
+        $content = $content -replace 'VITE_CORS_ORIGINS=.*', "VITE_CORS_ORIGINS=http://localhost:80,http://localhost:3000"
     }
     
     # Salvar arquivo

@@ -230,48 +230,40 @@ const PrintQueuePanel = () => {
           <Typography variant="h6" sx={{ mb: 2 }}>
             Resumo da Fila
           </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={3}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" sx={{ color: '#f59e0b', fontWeight: 600 }}>
-                  {printQueue.filter(item => item.status === 'pending').length}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Pendentes
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" sx={{ color: '#10b981', fontWeight: 600 }}>
-                  {printQueue.filter(item => item.status === 'printed').length}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Impressos
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" sx={{ color: '#ef4444', fontWeight: 600 }}>
-                  {printQueue.filter(item => item.status === 'error').length}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Com Erro
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" sx={{ color: '#8b5cf6', fontWeight: 600 }}>
-                  {printQueue.length}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Total
-                </Typography>
-              </Box>
-            </Grid>
-          </Grid>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" sx={{ color: '#f59e0b', fontWeight: 600 }}>
+                {printQueue.filter(item => item.status === 'pending').length}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Pendentes
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" sx={{ color: '#10b981', fontWeight: 600 }}>
+                {printQueue.filter(item => item.status === 'printed').length}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Impressos
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" sx={{ color: '#ef4444', fontWeight: 600 }}>
+                {printQueue.filter(item => item.status === 'error').length}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Com Erro
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" sx={{ color: '#8b5cf6', fontWeight: 600 }}>
+                {printQueue.length}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Total
+              </Typography>
+            </Box>
+          </Box>
         </CardContent>
       </Card>
 
