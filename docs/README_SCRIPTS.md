@@ -11,12 +11,16 @@
 # 1. Tornar executável
 chmod +x docs/deploy-vps-example.sh
 
-# 2. Executar (NÃO como root)
+# 2. Executar (como usuário normal OU como root)
 ./docs/deploy-vps-example.sh
+
+# OU como root (se necessário)
+sudo ./docs/deploy-vps-example.sh
 ```
 
 **⚠️ IMPORTANTE**: 
-- Execute como usuário normal, NÃO como root
+- Pode ser executado como usuário normal OU como root
+- Se executado como root, algumas configurações serão ajustadas automaticamente
 - O script criará um usuário 'quiosque' automaticamente
 - Configure o arquivo .env após a execução
 

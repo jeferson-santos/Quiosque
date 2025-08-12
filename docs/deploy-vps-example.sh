@@ -117,9 +117,17 @@ create_app_user() {
         return
     fi
     
-    sudo adduser --disabled-password --gecos "" quiosque
-    sudo usermod -aG docker quiosque
-    sudo usermod -aG sudo quiosque
+    if [ "$ROOT_USER" = true ]; then
+        # Executando como root
+        adduser --disabled-password --gecos "" quiosque
+        usermod -aG docker quiosque
+        usermod -aG sudo quiosque
+    else
+        # Executando como usuário normal
+        sudo adduser --disabled-password --gecos "" quiosque
+        sudo usermod -aG docker quiosque
+        sudo usermod -aG sudo quiosque
+    fi
     
     log_color $GREEN "✅ Usuário 'quiosque' criado!"
 }
@@ -128,8 +136,13 @@ create_app_user() {
 setup_directories() {
     log_color $BLUE "📁 Configurando diretórios..."
     
-    # Mudar para usuário quiosque
-    sudo -u quiosque mkdir -p /home/quiosque/quiosque/{apps,logs,backups,ssl}
+    if [ "$ROOT_USER" = true ]; then
+        # Executando como root
+        su - quiosque -c "mkdir -p /home/quiosque/quiosque/{apps,logs,backups,ssl}"
+    else
+        # Executando como usuário normal
+        sudo -u quiosque mkdir -p /home/quiosque/quiosque/{apps,logs,backups,ssl}
+    fi
     
     log_color $GREEN "✅ Diretórios configurados!"
 }
@@ -143,9 +156,17 @@ clone_repository() {
     if [ -d "Quiosque" ]; then
         log_color $YELLOW "⚠️ Repositório já existe, fazendo pull..."
         cd Quiosque
-        sudo -u quiosque git pull origin main
+        if [ "$ROOT_USER" = true ]; then
+            su - quiosque -c "cd /home/quiosque/quiosque/Quiosque && git pull origin main"
+        else
+            sudo -u quiosque git pull origin main
+        fi
     else
-        sudo -u quiosque git clone https://github.com/jeferson-santos/Quiosque.git
+        if [ "$ROOT_USER" = true ]; then
+            su - quiosque -c "cd /home/quiosque/quiosque && git clone https://github.com/jeferson-santos/Quiosque.git"
+        else
+            sudo -u quiosque git clone https://github.com/jeferson-santos/Quiosque.git
+        fi
         cd Quiosque
     fi
     
@@ -156,11 +177,19 @@ clone_repository() {
 setup_environment() {
     log_color $BLUE "⚙️ Configurando ambiente..."
     
-    # Copiar template
-    sudo -u quiosque cp env.prod.example .env
-    
-    # Criar arquivo de configuração personalizado
-    sudo -u quiosque tee .env > /dev/null <<EOF
+    if [ "$ROOT_USER" = true ]; then
+        # Executando como root
+        su - quiosque -c "cd /home/quiosque/quiosque/Quiosque && cp env.prod.example .env"
+        
+        # Criar arquivo de configuração personalizado
+        su - quiosque -c "cd /home/quiosque/quiosque/Quiosque && cat > .env" <<EOF
+    else
+        # Executando como usuário normal
+        sudo -u quiosque cp env.prod.example .env
+        
+        # Criar arquivo de configuração personalizado
+        sudo -u quiosque tee .env > /dev/null <<EOF
+    fi
 # ========================================
 # CONFIGURACOES DE PRODUCAO - SISTEMA DE QUIOSQUE
 # ========================================
@@ -222,6 +251,11 @@ VITE_DEBUG=false
 # ========================================
 RESTAURANT_NAME=Restaurante Exemplo Ltda
 EOF
+    else
+        # Fechar o heredoc para usuário normal
+        RESTAURANT_NAME=Restaurante Exemplo Ltda
+EOF
+    fi
     
     log_color $YELLOW "⚠️ IMPORTANTE: Edite o arquivo .env com suas configurações reais!"
     log_color $YELLOW "⚠️ Especialmente as senhas e chaves secretas!"
@@ -233,13 +267,18 @@ EOF
 create_client() {
     log_color $BLUE "🏪 Criando cliente..."
     
-    # Executar script de criação
-    sudo -u quiosque ./scripts/create-client.sh \
-        --client-name "Restaurante Exemplo" \
-        --client-id "exemplo" \
-        --domain "seudominio.com" \
-        --restaurant-name "Restaurante Exemplo Ltda" \
-        --skip-confirmation
+    if [ "$ROOT_USER" = true ]; then
+        # Executando como root
+        su - quiosque -c "cd /home/quiosque/quiosque/Quiosque && ./scripts/create-client.sh --client-name 'Restaurante Exemplo' --client-id 'exemplo' --domain 'seudominio.com' --restaurant-name 'Restaurante Exemplo Ltda' --skip-confirmation"
+    else
+        # Executando como usuário normal
+        sudo -u quiosque ./scripts/create-client.sh \
+            --client-name "Restaurante Exemplo" \
+            --client-id "exemplo" \
+            --domain "seudominio.com" \
+            --restaurant-name "Restaurante Exemplo Ltda" \
+            --skip-confirmation
+    fi
     
     log_color $GREEN "✅ Cliente criado!"
 }
@@ -248,8 +287,13 @@ create_client() {
 deploy_application() {
     log_color $BLUE "🚀 Fazendo deploy da aplicação..."
     
-    # Executar deploy
-    sudo -u quiosque ./deploy-exemplo.sh
+    if [ "$ROOT_USER" = true ]; then
+        # Executando como root
+        su - quiosque -c "cd /home/quiosque/quiosque/Quiosque && ./deploy-exemplo.sh"
+    else
+        # Executando como usuário normal
+        sudo -u quiosque ./deploy-exemplo.sh
+    fi
     
     log_color $GREEN "✅ Deploy concluído!"
 }
@@ -261,15 +305,27 @@ check_status() {
     # Aguardar um pouco para os serviços estabilizarem
     sleep 10
     
-    # Verificar containers
-    sudo -u quiosque docker ps
-    
-    # Verificar logs
-    log_color $YELLOW "📋 Logs do Backend:"
-    sudo -u quiosque docker logs quiosque_backend_exemplo --tail 10
-    
-    log_color $YELLOW "📋 Logs do Frontend:"
-    sudo -u quiosque docker logs quiosque_frontend_exemplo --tail 5
+    if [ "$ROOT_USER" = true ]; then
+        # Executando como root
+        su - quiosque -c "docker ps"
+        
+        # Verificar logs
+        log_color $YELLOW "📋 Logs do Backend:"
+        su - quiosque -c "docker logs quiosque_backend_exemplo --tail 10"
+        
+        log_color $YELLOW "📋 Logs do Frontend:"
+        su - quiosque -c "docker logs quiosque_frontend_exemplo --tail 5"
+    else
+        # Executando como usuário normal
+        sudo -u quiosque docker ps
+        
+        # Verificar logs
+        log_color $YELLOW "📋 Logs do Backend:"
+        sudo -u quiosque docker logs quiosque_backend_exemplo --tail 10
+        
+        log_color $YELLOW "📋 Logs do Frontend:"
+        sudo -u quiosque docker logs quiosque_frontend_exemplo --tail 5
+    fi
     
     log_color $GREEN "✅ Verificação concluída!"
 }
@@ -280,19 +336,40 @@ show_next_steps() {
     echo
     log_color $BLUE "📋 Próximos passos:"
     echo
-    log_color $YELLOW "1. Edite o arquivo .env com suas configurações reais:"
-    log_color $BLUE "   sudo -u quiosque nano /home/quiosque/quiosque/Quiosque/.env"
-    echo
-    log_color $YELLOW "2. Recrie o cliente com suas configurações:"
-    log_color $BLUE "   cd /home/quiosque/quiosque/Quiosque"
-    log_color $BLUE "   sudo -u quiosque ./scripts/create-client.sh --client-name 'Seu Restaurante' --client-id 'seurestaurante' --domain 'seudominio.com' --skip-confirmation"
-    echo
-    log_color $YELLOW "3. Faça o deploy:"
-    log_color $BLUE "   sudo -u quiosque ./deploy-seurestaurante.sh"
-    echo
-    log_color $YELLOW "4. Configure DNS e SSL (consulte DEPLOY_VPS_UBUNTU.md)"
-    echo
-    log_color $GREEN "📚 Documentação completa: docs/DEPLOY_VPS_UBUNTU.md"
+    
+    if [ "$ROOT_USER" = true ]; then
+        log_color $YELLOW "1. Edite o arquivo .env com suas configurações reais:"
+        log_color $BLUE "   su - quiosque -c 'nano /home/quiosque/quiosque/Quiosque/.env'"
+        echo
+        log_color $YELLOW "2. Recrie o cliente com suas configurações:"
+        log_color $BLUE "   su - quiosque"
+        log_color $BLUE "   cd /home/quiosque/quiosque/Quiosque"
+        log_color $BLUE "   ./scripts/create-client.sh --client-name 'Seu Restaurante' --client-id 'seurestaurante' --domain 'seudominio.com' --skip-confirmation"
+        echo
+        log_color $YELLOW "3. Faça o deploy:"
+        log_color $BLUE "   ./deploy-seurestaurante.sh"
+        echo
+        log_color $YELLOW "4. Configure DNS e SSL (consulte DEPLOY_VPS_UBUNTU.md)"
+        echo
+        log_color $GREEN "📚 Documentação completa: docs/DEPLOY_VPS_UBUNTU.md"
+        echo
+        log_color $YELLOW "💡 Dica: Para facilitar, você pode mudar para o usuário quiosque:"
+        log_color $BLUE "   su - quiosque"
+    else
+        log_color $YELLOW "1. Edite o arquivo .env com suas configurações reais:"
+        log_color $BLUE "   sudo -u quiosque nano /home/quiosque/quiosque/Quiosque/.env"
+        echo
+        log_color $YELLOW "2. Recrie o cliente com suas configurações:"
+        log_color $BLUE "   cd /home/quiosque/quiosque/Quiosque"
+        log_color $BLUE "   sudo -u quiosque ./scripts/create-client.sh --client-name 'Seu Restaurante' --client-id 'seurestaurante' --domain 'seudominio.com' --skip-confirmation"
+        echo
+        log_color $YELLOW "3. Faça o deploy:"
+        log_color $BLUE "   sudo -u quiosque ./deploy-seurestaurante.sh"
+        echo
+        log_color $YELLOW "4. Configure DNS e SSL (consulte DEPLOY_VPS_UBUNTU.md)"
+        echo
+        log_color $GREEN "📚 Documentação completa: docs/DEPLOY_VPS_UBUNTU.md"
+    fi
 }
 
 # Função principal
@@ -303,9 +380,10 @@ main() {
     
     # Verificar se é root
     if [ "$EUID" -eq 0 ]; then
-        log_color $RED "❌ Este script não deve ser executado como root!"
-        log_color $RED "❌ Execute como usuário normal com sudo habilitado"
-        exit 1
+        log_color $YELLOW "⚠️ Executando como root - algumas configurações serão ajustadas"
+        ROOT_USER=true
+    else
+        ROOT_USER=false
     fi
     
     # Verificar sistema operacional
@@ -317,6 +395,7 @@ main() {
     log_color $BLUE "🔍 Verificando sistema..."
     log_color $BLUE "OS: $(lsb_release -d | cut -f2)"
     log_color $BLUE "Usuário: $USER"
+    log_color $BLUE "Root: $ROOT_USER"
     echo
     
     # Executar etapas
