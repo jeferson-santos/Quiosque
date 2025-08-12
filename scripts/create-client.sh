@@ -56,7 +56,7 @@ create_environment_file() {
     local template_file="env.prod.example"
     
     if [[ ! -f "$template_file" ]]; then
-        log_color $RED "❌ Arquivo env.prod não encontrado!"
+        log_color $RED "❌ Arquivo env.prod.example não encontrado!"
         exit 1
     fi
     
@@ -229,8 +229,9 @@ create_deploy_script() {
 echo "🚀 Iniciando deploy para cliente: CLIENT_NAME_PLACEHOLDER"
 
 # Verificar se os arquivos existem
-if [[ ! -f "env.prod.CLIENT_ID_PLACEHOLDER" ]]; then
-    echo "❌ Arquivo env.prod.CLIENT_ID_PLACEHOLDER não encontrado!"
+if [[ ! -f ".env" ]]; then
+    echo "❌ Arquivo .env não encontrado!"
+    echo "💡 Execute o script create-client.sh primeiro para criar o ambiente"
     exit 1
 fi
 
@@ -333,7 +334,7 @@ docker-compose -f docker-compose.$CLIENT_ID.yml restart
 
 ## 🔧 Configurações
 
-- **Arquivo de Ambiente:** env.prod.$CLIENT_ID
+- **Arquivo de Ambiente:** .env
 - **Docker Compose:** docker-compose.$CLIENT_ID.yml
 - **Script de Deploy:** deploy-$CLIENT_ID.sh
 
@@ -430,7 +431,7 @@ main() {
     log_color $YELLOW ""
     log_color $YELLOW "⚠️ IMPORTANTE:"
     log_color $YELLOW "   • Salve as credenciais em local seguro"
-    log_color $YELLOW "   • Nunca commite o arquivo env.prod.$CLIENT_ID no Git"
+    log_color $YELLOW "   • Nunca commite o arquivo .env no Git"
     log_color $YELLOW "   • Configure as portas no arquivo de ambiente se necessário"
 }
 
