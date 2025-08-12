@@ -58,4 +58,4 @@ Este projeto é privado e de uso interno.
 
 ## 👨‍💻 Desenvolvido por
 
-Jeferson Santos - NetBR
+Jeferson Santos

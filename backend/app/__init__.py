@@ -33,9 +33,8 @@ from app.api import (
 from app.core.config import Settings
 from app.db import Base, SessionLocal, engine
 from app.middleware_logging import LoggingMiddleware
-
-# Cria as tabelas no banco de dados
-Base.metadata.create_all(bind=engine)
+from app.crud.user import create_user, get_user_by_username
+from app.schemas.user import UserCreate, RoleEnum
 
 # Configurar Loguru para logs JSON
 logger.remove()
@@ -96,3 +95,38 @@ def healthcheck():
         "status": "ok",
         "db": db_status,
     }
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Evento executado quando a aplicação inicia."""
+    try:
+        logger.info("🚀 Iniciando configuração automática do banco de dados...")
+        
+        # Criar todas as tabelas automaticamente
+        logger.info("🔧 Criando tabelas no banco de dados...")
+        Base.metadata.create_all(bind=engine)
+        logger.info("✅ Tabelas criadas com sucesso!")
+        
+        # Criar usuário admin padrão se não existir
+        with SessionLocal() as db:
+            admin_user = get_user_by_username(db, "admin")
+            if not admin_user:
+                logger.info("👤 Criando usuário admin padrão...")
+                admin_data = UserCreate(
+                    username="admin",
+                    password="admin123",
+                    role=RoleEnum.ADMINISTRATOR,
+                )
+                create_user(db, admin_data)
+                logger.info("✅ Usuário admin criado com sucesso!")
+                logger.info("📋 Credenciais padrão: admin / admin123")
+            else:
+                logger.info("✅ Usuário admin já existe")
+                
+        logger.info("🎉 Configuração automática concluída com sucesso!")
+                
+    except Exception as e:
+        logger.error(f"❌ Erro durante configuração automática: {e}")
+        # Não falhar a aplicação se não conseguir configurar
+        logger.warning("⚠️ Aplicação continuará sem configuração automática")
