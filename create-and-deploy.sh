@@ -101,7 +101,7 @@ find_port_in_range() {
     for port in $(seq $start_port $end_port); do
         if ! echo "$used_ports" | grep -q "^$port$"; then
             log_color $GREEN "   ✅ $service_name: porta $port disponível"
-            echo "$port"
+            printf "%d" "$port"
             return 0
         fi
     done
