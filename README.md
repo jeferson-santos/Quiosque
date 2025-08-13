@@ -55,12 +55,12 @@ cd Quiosque
   -r "Meu Restaurante Ltda"
 ```
 
-### **3. Para deploy em VPS Ubuntu (TUDO EM UM!)**
+### **3. Para deploy em VPS Ubuntu (ARQUITETURA LIMPA!)**
 ```bash
-# Setup COMPLETO da VPS (inclui nginx para subdomínios)
+# Setup COMPLETO da VPS (domínio principal + SSL)
 sudo ./scripts/setup-vps.sh -d meudominio.com -e admin@meudominio.com
 
-# Depois apenas criar clientes
+# Depois apenas criar clientes (cada um com seu próprio subdomain)
 ./create-and-deploy.sh -n "Meu Restaurante" -i "restaurante1" -d "meudominio.com"
 ```
 
@@ -72,6 +72,97 @@ sudo ./scripts/setup-vps.sh -d meudominio.com -e admin@meudominio.com
 
 **Nota**: Todas as configurações (backend e frontend) estão centralizadas em um único arquivo `env.prod.<client_id>`
 
+## 🖥️ **Deploy em VPS Ubuntu (Passo a Passo)**
+
+### **📋 Pré-requisitos da VPS**
+- **Sistema**: Ubuntu 20.04+ (recomendado 22.04 LTS)
+- **RAM**: Mínimo 2GB (recomendado 4GB+)
+- **Disco**: Mínimo 20GB (recomendado 40GB+)
+- **Domínio**: Aponte A record para IP da VPS
+- **Acesso**: Root ou sudo
+
+### **🚀 Passo 1: Preparar a VPS**
+```bash
+# Conectar na VPS
+ssh root@SEU_IP_VPS
+
+# Atualizar sistema
+apt update && apt upgrade -y
+
+# Instalar dependências básicas
+apt install -y git curl wget
+```
+
+### **📥 Passo 2: Clonar o projeto**
+```bash
+# Clonar repositório
+git clone https://github.com/jeferson-santos/quiosque.git /home/quiosque
+cd /home/quiosque
+
+# Dar permissões de execução
+chmod +x *.sh scripts/*.sh
+```
+
+### **⚙️ Passo 3: Configurar VPS (Docker + Nginx + SSL)**
+```bash
+# Executar setup COMPLETO da VPS
+sudo ./scripts/setup-vps.sh -d SEU_DOMINIO.com -e SEU_EMAIL@exemplo.com
+
+# Exemplo:
+sudo ./scripts/setup-vps.sh -d psicomariaantonia.com.br -e admin@psicomariaantonia.com.br
+```
+
+**O que o setup-vps.sh faz:**
+- ✅ **Docker**: Instala e configura
+- ✅ **Nginx**: Configura arquitetura limpa
+- ✅ **SSL**: Certbot para domínio principal
+- ✅ **Firewall**: UFW configurado
+- ✅ **Backup**: Sistema automático
+- ✅ **Monitoramento**: Logs e health checks
+
+### **🌐 Passo 4: Verificar configuração**
+```bash
+# Testar Nginx
+sudo nginx -t
+
+# Verificar status dos serviços
+sudo systemctl status nginx
+sudo systemctl status docker
+
+# Acessar domínio principal
+curl -I https://SEU_DOMINIO.com
+```
+
+### **👥 Passo 5: Criar clientes (subdomains)**
+```bash
+# Criar primeiro cliente
+./create-and-deploy.sh -n "Restaurante A" -i "restaurante_a" -d "SEU_DOMINIO.com" -e "admin@exemplo.com"
+
+# Criar segundo cliente
+./create-and-deploy.sh -n "Restaurante B" -i "restaurante_b" -d "SEU_DOMINIO.com" -e "admin@exemplo.com"
+```
+
+**O que o create-and-deploy.sh faz:**
+- ✅ **Docker**: Containers com portas automáticas
+- ✅ **Nginx**: Arquivo individual por subdomain
+- ✅ **SSL**: Certificado para subdomain
+- ✅ **Banco**: PostgreSQL isolado por cliente
+- ✅ **Cache**: Redis isolado por cliente
+
+### **🔍 Passo 6: Verificar funcionamento**
+```bash
+# Listar containers
+docker ps
+
+# Verificar arquivos Nginx
+ls -la /etc/nginx/sites-available/
+ls -la /etc/nginx/sites-enabled/
+
+# Testar subdomains
+curl -I http://restaurante_a.SEU_DOMINIO.com
+curl -I http://restaurante_b.SEU_DOMINIO.com
+```
+
 ## 🔧 **Configuração Automática**
 
 O sistema **não requer configuração manual**:
@@ -80,7 +171,7 @@ O sistema **não requer configuração manual**:
 2. **Usuário admin**: Criado automaticamente (`admin` / `admin123`)
 3. **Configurações**: Geradas automaticamente para cada cliente
 4. **Networks Docker**: Isolados por cliente
-5. **Nginx**: Configurado automaticamente para domínio principal e subdomínios
+5. **Nginx**: Arquivos separados por subdomain (arquitetura limpa)
 6. **SSL**: Configurado automaticamente para todos os domínios
 
 ## 📁 **Estrutura do Projeto**
@@ -96,7 +187,7 @@ Quiosque/
 │   ├── package.json        # Dependências Node.js
 │   └── Dockerfile         # Container do frontend
 ├── scripts/                 # Scripts de automação
-│   ├── setup-vps.sh         # Script COMPLETO para VPS Ubuntu (tudo em um!)
+│   ├── setup-vps.sh         # Script COMPLETO para VPS Ubuntu (arquitetura limpa)
 │   ├── deploy-subdomain.sh  # Script para configurar subdomínios específicos
 │   └── cleanup-vps.sh       # Script para limpeza completa da VPS
 ├── create-and-deploy.sh    # Script unificado para criação e deploy
@@ -126,14 +217,37 @@ Quiosque/
 - `docker-compose.<client_id>.yml` - Docker Compose
 - **Deploy automático** - Não precisa de script separado
 
-## 🌐 **Portas Padrão**
+## 🌐 **Arquitetura do Nginx (NOVA!)**
 
-- **Frontend**: 80
-- **Backend**: 8000
-- **PostgreSQL**: 5432
-- **Redis**: 6379
+### **🏗️ Estrutura de Arquivos**
+```bash
+/etc/nginx/sites-available/
+├── default                           # Domínio principal (setup-vps.sh)
+├── cliente1.SEU_DOMINIO.com         # Cliente 1 (create-and-deploy.sh)
+├── cliente2.SEU_DOMINIO.com         # Cliente 2 (create-and-deploy.sh)
+└── cliente3.SEU_DOMINIO.com         # Cliente 3 (create-and-deploy.sh)
 
-*Cada cliente usa portas diferentes para evitar conflitos*
+/etc/nginx/sites-enabled/
+├── default -> ../sites-available/default
+├── cliente1.SEU_DOMINIO.com -> ../sites-available/cliente1.SEU_DOMINIO.com
+└── ...
+```
+
+### **🎯 Vantagens da Nova Arquitetura**
+- ✅ **Arquivos separados** - Um por subdomain
+- ✅ **Zero conflitos** - Cada cliente isolado
+- ✅ **Manutenção fácil** - Editar/remover individualmente
+- ✅ **Padrão Nginx** - sites-available/sites-enabled
+- ✅ **SSL individual** - Certificado por subdomain
+- ✅ **Logs separados** - Por cliente
+
+### **🔧 Portas Automáticas**
+- **Frontend**: Porta escolhida automaticamente pelo Docker
+- **Backend**: Porta escolhida automaticamente pelo Docker
+- **PostgreSQL**: Porta escolhida automaticamente pelo Docker
+- **Redis**: Porta escolhida automaticamente pelo Docker
+
+*Docker gerencia portas automaticamente - zero conflitos!*
 
 ## 🔒 **Segurança**
 
