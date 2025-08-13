@@ -26,14 +26,16 @@ check_port_available() {
     local port=$1
     
     # Verificar se a porta está em uso
-    if command -v netstat >/dev/null 2>&1; then
-        if netstat -tln 2>/dev/null | grep -q ":$port " 2>/dev/null; then
+    if command -v ss >/dev/null 2>&1; then
+        # ss é mais moderno e geralmente está disponível
+        if ss -tln 2>/dev/null | grep -q ":$port " 2>/dev/null; then
             return 1  # Porta ocupada
         else
             return 0  # Porta livre
         fi
-    elif command -v ss >/dev/null 2>&1; then
-        if ss -tln 2>/dev/null | grep -q ":$port " 2>/dev/null; then
+    elif command -v netstat >/dev/null 2>&1; then
+        # netstat como fallback
+        if netstat -tln 2>/dev/null | grep -q ":$port " 2>/dev/null; then
             return 1  # Porta ocupada
         else
             return 0  # Porta livre
@@ -81,6 +83,56 @@ find_available_port() {
     
     log_color $GREEN "      ✅ Porta $port está disponível!"
     echo $port
+}
+
+# Função para verificar e instalar dependências necessárias
+check_and_install_dependencies() {
+    log_color $BLUE "🔧 Verificando dependências necessárias..."
+    
+    local missing_packages=()
+    
+    # Verificar se ss está disponível (para verificação de portas)
+    if ! command -v ss >/dev/null 2>&1; then
+        missing_packages+=("iproute2")
+    fi
+    
+    # Verificar se netstat está disponível (fallback)
+    if ! command -v netstat >/dev/null 2>&1; then
+        missing_packages+=("net-tools")
+    fi
+    
+    # Verificar se grep está disponível
+    if ! command -v grep >/dev/null 2>&1; then
+        missing_packages+=("grep")
+    fi
+    
+    # Verificar se docker está disponível
+    if ! command -v docker >/dev/null 2>&1; then
+        missing_packages+=("docker.io")
+    fi
+    
+    # Verificar se docker compose está disponível
+    if ! command -v docker-compose >/dev/null 2>&1 && ! docker compose version >/dev/null 2>&1; then
+        missing_packages+=("docker-compose")
+    fi
+    
+    # Se há pacotes faltando, instalar
+    if [ ${#missing_packages[@]} -gt 0 ]; then
+        log_color $YELLOW "⚠️ Dependências faltando: ${missing_packages[*]}"
+        log_color $BLUE "🔧 Instalando dependências..."
+        
+        # Atualizar lista de pacotes
+        apt update -y
+        
+        # Instalar pacotes faltando
+        apt install -y "${missing_packages[@]}"
+        
+        log_color $GREEN "✅ Dependências instaladas com sucesso!"
+    else
+        log_color $GREEN "✅ Todas as dependências estão disponíveis"
+    fi
+    
+    echo
 }
 
 # Função para verificar se cliente já existe
@@ -249,8 +301,12 @@ show_help() {
     echo "📚 Para deploy em VPS Ubuntu, use: scripts/setup-vps-complete.sh"
     echo
     echo "🔍 DETECÇÃO AUTOMÁTICA DE PORTAS:"
-    echo "   O script verifica automaticamente se as portas padrão estão ocupadas"
-    echo "   e escolhe as próximas portas disponíveis automaticamente"
+echo "   O script verifica automaticamente se as portas padrão estão ocupadas"
+echo "   e escolhe as próximas portas disponíveis automaticamente"
+echo
+echo "🔧 DEPENDÊNCIAS AUTOMÁTICAS:"
+echo "   O script verifica e instala automaticamente todas as dependências"
+echo "   necessárias (ss, netstat, grep, docker, docker-compose)"
     echo
     echo "🔄 VERIFICAÇÃO DE CLIENTES EXISTENTES:"
     echo "   Se um cliente com o mesmo ID já existir, o script pergunta"
@@ -679,6 +735,9 @@ main() {
     fi
     
     log_color $GREEN "🚀 Iniciando criação e deploy automático..."
+    
+    # Verificar e instalar dependências necessárias
+    check_and_install_dependencies
     
     # Verificar se cliente já existe
     check_client_exists "$CLIENT_ID"
