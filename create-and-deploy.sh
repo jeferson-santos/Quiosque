@@ -1,9 +1,10 @@
 #!/bin/bash
 # ========================================
-# SCRIPT UNIFICADO: CRIAÇÃO E DEPLOY AUTOMÁTICO
+# SCRIPT UNIFICADO: CRIAÇÃO E DEPLOY AUTOMÁTICO (REFATORADO)
 # ========================================
 # Este script cria um cliente e faz o deploy automaticamente
-# Uso: ./create-and-deploy.sh -n "Nome do Cliente" -i "client_id" [-d "dominio"] [-r "Nome do Restaurante"]
+# Usa portas automáticas do Docker e configura proxy reverso do Nginx
+# Uso: ./create-and-deploy.sh -n "Nome do Cliente" -i "client_id" [-d "dominio"] [-r "Nome do Restaurante"] [-e "email"]
 
 set -e  # Parar em caso de erro
 
@@ -21,90 +22,11 @@ log_color() {
     echo -e "${color}${message}${NC}"
 }
 
-# Função para verificar se uma porta está disponível
-check_port_available() {
-    local port=$1
-    
-    # Verificar se a porta está em uso
-    if command -v ss >/dev/null 2>&1; then
-        # ss é mais moderno e geralmente está disponível
-        if ss -tln 2>/dev/null | grep -q ":$port " 2>/dev/null; then
-            return 1  # Porta ocupada
-        else
-            return 0  # Porta livre
-        fi
-    elif command -v netstat >/dev/null 2>&1; then
-        # netstat como fallback
-        if netstat -tln 2>/dev/null | grep -q ":$port " 2>/dev/null; then
-            return 1  # Porta ocupada
-        else
-            return 0  # Porta livre
-        fi
-    else
-        # Fallback: tentar conectar na porta
-        if (echo >/dev/tcp/localhost/$port) >/dev/null 2>&1; then
-            return 1  # Porta ocupada
-        else
-            return 0  # Porta livre
-        fi
-    fi
-}
-
-# Função para encontrar próxima porta disponível
-find_available_port() {
-    local start_port=$1
-    local port=$start_port
-    
-    log_color $BLUE "      Testando porta $port..."
-    
-    # Debug: verificar se check_port_available funciona
-    local check_result
-    check_port_available $port
-    check_result=$?
-    log_color $BLUE "      Debug: check_port_available($port) retornou $check_result"
-    
-    while ! check_port_available $port; do
-        log_color $YELLOW "      ⚠️ Porta $port está ocupada, tentando próxima..."
-        port=$((port + 1))
-        
-        # Evitar loop infinito
-        if [ $port -gt 65535 ]; then
-            log_color $RED "❌ Erro: Não foi possível encontrar porta disponível"
-            exit 1
-        fi
-        
-        log_color $BLUE "      Testando porta $port..."
-        
-        # Debug: verificar resultado novamente
-        check_port_available $port
-        check_result=$?
-        log_color $BLUE "      Debug: check_port_available($port) retornou $check_result"
-    done
-    
-    log_color $GREEN "      ✅ Porta $port está disponível!"
-    echo $port
-}
-
 # Função para verificar e instalar dependências necessárias
 check_and_install_dependencies() {
     log_color $BLUE "🔧 Verificando dependências necessárias..."
     
     local missing_packages=()
-    
-    # Verificar se ss está disponível (para verificação de portas)
-    if ! command -v ss >/dev/null 2>&1; then
-        missing_packages+=("iproute2")
-    fi
-    
-    # Verificar se netstat está disponível (fallback)
-    if ! command -v netstat >/dev/null 2>&1; then
-        missing_packages+=("net-tools")
-    fi
-    
-    # Verificar se grep está disponível
-    if ! command -v grep >/dev/null 2>&1; then
-        missing_packages+=("grep")
-    fi
     
     # Verificar se docker está disponível
     if ! command -v docker >/dev/null 2>&1; then
@@ -114,6 +36,16 @@ check_and_install_dependencies() {
     # Verificar se docker compose está disponível
     if ! command -v docker-compose >/dev/null 2>&1 && ! docker compose version >/dev/null 2>&1; then
         missing_packages+=("docker-compose")
+    fi
+    
+    # Verificar se grep está disponível
+    if ! command -v grep >/dev/null 2>&1; then
+        missing_packages+=("grep")
+    fi
+    
+    # Verificar se sed está disponível
+    if ! command -v sed >/dev/null 2>&1; then
+        missing_packages+=("sed")
     fi
     
     # Se há pacotes faltando, instalar
@@ -140,6 +72,8 @@ check_client_exists() {
     local client_id="$1"
     local compose_file="docker-compose.$client_id.yml"
     local env_file=".env"
+    
+    log_color $BLUE "🔍 Verificando se cliente já existe..."
     
     if [[ -f "$compose_file" ]] || [[ -f "$env_file" ]]; then
         log_color $YELLOW "⚠️ Cliente '$client_id' já existe!"
@@ -172,6 +106,7 @@ check_client_exists() {
         fi
     fi
     
+    log_color $GREEN "✅ Cliente '$client_id' não existe, continuando..."
     return 1
 }
 
@@ -219,66 +154,425 @@ remove_existing_client() {
     echo
 }
 
-# Função para verificar e configurar portas disponíveis
-configure_available_ports() {
-    log_color $BLUE "🔍 Verificando portas disponíveis..."
+# Função para configurar portas automáticas do Docker
+configure_docker_ports() {
+    log_color $BLUE "🔍 Configurando portas automáticas do Docker..."
     
-    # Verificar porta do frontend (padrão: 80)
-    log_color $BLUE "   Verificando porta 80 (frontend)..."
-    local frontend_port=$(find_available_port 80)
-    log_color $BLUE "   Debug: frontend_port = $frontend_port"
-    if [ $frontend_port -ne 80 ]; then
-        log_color $YELLOW "⚠️ Porta 80 ocupada, usando porta $frontend_port para frontend"
+    # Usar binding automático de portas (Docker escolhe portas disponíveis)
+    log_color $GREEN "✅ Docker irá escolher automaticamente as portas disponíveis"
+    log_color $BLUE "   • Frontend: porta automática (interna: 80)"
+    log_color $BLUE "   • Backend: porta automática (interna: 8000)"
+    log_color $BLUE "   • PostgreSQL: porta automática (interna: 5432)"
+    log_color $BLUE "   • Redis: porta automática (interna: 6379)"
+    
+    log_color $BLUE "✅ Configuração de portas concluída!"
+}
+
+# Função para obter portas escolhidas pelo Docker
+get_docker_ports() {
+    local client_id="$1"
+    
+    log_color $BLUE "🔍 Obtendo portas escolhidas pelo Docker..."
+    
+    # Aguardar um pouco para os containers iniciarem
+    sleep 5
+    
+    # Obter porta do frontend
+    local frontend_port=$(docker port "quiosque_frontend_$client_id" 80 2>/dev/null | cut -d: -f2 | cut -d' ' -f1)
+    if [[ -n "$frontend_port" ]]; then
+        log_color $GREEN "   ✅ Frontend: porta $frontend_port"
     else
-        log_color $GREEN "✅ Porta 80 disponível para frontend"
+        log_color $YELLOW "   ⚠️ Frontend: porta não disponível ainda"
+        frontend_port="aguardando..."
     fi
     
-    # Verificar porta do backend (padrão: 8000)
-    log_color $BLUE "   Verificando porta 8000 (backend)..."
-    local backend_port=$(find_available_port 8000)
-    if [ $backend_port -ne 8000 ]; then
-        log_color $YELLOW "⚠️ Porta 8000 ocupada, usando porta $backend_port para backend"
+    # Obter porta do backend
+    local backend_port=$(docker port "quiosque_backend_$client_id" 8000 2>/dev/null | cut -d: -f2 | cut -d' ' -f1)
+    if [[ -n "$backend_port" ]]; then
+        log_color $GREEN "   ✅ Backend: porta $backend_port"
     else
-        log_color $GREEN "✅ Porta 8000 disponível para backend"
+        log_color $YELLOW "   ⚠️ Backend: porta não disponível ainda"
+        backend_port="aguardando..."
     fi
     
-    # Verificar porta do PostgreSQL (padrão: 5432)
-    log_color $BLUE "   Verificando porta 5432 (PostgreSQL)..."
-    local postgres_port=$(find_available_port 5432)
-    if [ $postgres_port -ne 5432 ]; then
-        log_color $YELLOW "⚠️ Porta 5432 ocupada, usando porta $postgres_port para PostgreSQL"
+    # Obter porta do PostgreSQL
+    local postgres_port=$(docker port "quiosque_postgres_$client_id" 5432 2>/dev/null | cut -d: -f2 | cut -d' ' -f1)
+    if [[ -n "$postgres_port" ]]; then
+        log_color $GREEN "   ✅ PostgreSQL: porta $postgres_port"
     else
-        log_color $GREEN "✅ Porta 5432 disponível para PostgreSQL"
+        log_color $YELLOW "   ⚠️ PostgreSQL: porta não disponível ainda"
+        postgres_port="aguardando..."
     fi
     
-    # Verificar porta do Redis (padrão: 6379)
-    log_color $BLUE "   Verificando porta 6379 (Redis)..."
-    local redis_port=$(find_available_port 6379)
-    if [ $redis_port -ne 6379 ]; then
-        log_color $YELLOW "⚠️ Porta 6379 ocupada, usando porta $redis_port para Redis"
+    # Obter porta do Redis
+    local redis_port=$(docker port "quiosque_redis_$client_id" 6379 2>/dev/null | cut -d: -f2 | cut -d' ' -f1)
+    if [[ -n "$redis_port" ]]; then
+        log_color $GREEN "   ✅ Redis: porta $redis_port"
     else
-        log_color $GREEN "✅ Porta 6379 disponível para Redis"
+        log_color $YELLOW "   ⚠️ Redis: porta não disponível ainda"
+        redis_port="aguardando..."
     fi
     
-    # Salvar portas escolhidas para uso posterior
-    FRONTEND_PORT_CHOSEN=$frontend_port
-    BACKEND_PORT_CHOSEN=$backend_port
-    POSTGRES_PORT_CHOSEN=$postgres_port
-    REDIS_PORT_CHOSEN=$redis_port
+    # Salvar portas para uso posterior
+    FRONTEND_PORT_CHOSEN="$frontend_port"
+    BACKEND_PORT_CHOSEN="$backend_port"
+    POSTGRES_PORT_CHOSEN="$postgres_port"
+    REDIS_PORT_CHOSEN="$redis_port"
     
-    log_color $GREEN "🎯 Portas configuradas:"
+    log_color $GREEN "🎯 Portas obtidas do Docker:"
     log_color $GREEN "   Frontend: $frontend_port"
     log_color $GREEN "   Backend: $backend_port"
     log_color $GREEN "   PostgreSQL: $postgres_port"
     log_color $GREEN "   Redis: $redis_port"
     
-    log_color $BLUE "✅ Verificação de portas concluída!"
+    log_color $BLUE "✅ Portas obtidas com sucesso!"
+}
+
+# Função para gerar senhas seguras
+generate_password() {
+    local length=${1:-16}
+    tr -dc 'A-Za-z0-9!@#$%^&*' < /dev/urandom | head -c $length
+}
+
+# Função para criar arquivo de ambiente
+create_env_file() {
+    local client_name="$1"
+    local client_id="$2"
+    local domain="$3"
+    local restaurant_name="$4"
+    
+    log_color $BLUE "📝 Criando arquivo de ambiente..."
+    
+    # Gerar senhas e chaves
+    local postgres_password=$(generate_password 16)
+    local redis_password=$(generate_password 16)
+    local secret_key=$(generate_password 32)
+    
+    # Criar arquivo .env
+    cat > ".env" << EOF
+# ========================================
+# CONFIGURAÇÃO DO CLIENTE: $client_name
+# ========================================
+# Gerado automaticamente em: $(date)
+# Cliente ID: $client_id
+
+# Configurações do Cliente
+CLIENT_NAME=$client_name
+CLIENT_ID=$client_id
+RESTAURANT_NAME=$restaurant_name
+DOMAIN=$domain
+
+# Configurações do Backend
+BACKEND_PORT=8000
+SECRET_KEY=$secret_key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Configurações do Frontend
+FRONTEND_PORT=80
+VITE_API_BASE_URL=http://localhost:8000
+
+# Configurações do PostgreSQL
+POSTGRES_SERVER=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=quiosque_$client_id
+POSTGRES_USER=quiosque_$client_id
+POSTGRES_PASSWORD=$postgres_password
+
+# Configurações do Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=$redis_password
+REDIS_DB=0
+
+# Configurações de CORS
+CORS_ORIGINS=http://localhost:80,http://localhost:8000,http://$domain,https://$domain
+
+# Configurações de Log
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+
+# Configurações de Backup
+BACKUP_ENABLED=true
+BACKUP_RETENTION_DAYS=7
+EOF
+
+    log_color $GREEN "✅ Arquivo .env criado com sucesso!"
+}
+
+# Função para criar docker-compose
+create_docker_compose() {
+    local client_id="$1"
+    
+    log_color $BLUE "🐳 Criando docker-compose..."
+    
+    # Criar arquivo docker-compose
+    cat > "docker-compose.$client_id.yml" << EOF
+version: '3.8'
+
+services:
+  frontend_$client_id:
+    build: ./frontend
+    container_name: quiosque_frontend_$client_id
+    ports:
+      - "0:80"  # Docker escolhe porta disponível
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - quiosque_network_$client_id
+    depends_on:
+      - backend_$client_id
+    restart: unless-stopped
+
+  backend_$client_id:
+    build: ./backend
+    container_name: quiosque_backend_$client_id
+    ports:
+      - "0:8000"  # Docker escolhe porta disponível
+    environment:
+      - POSTGRES_SERVER=postgres_$client_id
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=quiosque_$client_id
+      - POSTGRES_USER=quiosque_$client_id
+      - POSTGRES_PASSWORD=\${POSTGRES_PASSWORD}
+      - REDIS_HOST=redis_$client_id
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=\${REDIS_PASSWORD}
+      - SECRET_KEY=\${SECRET_KEY}
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - CORS_ORIGINS=\${CORS_ORIGINS}
+    volumes:
+      - ./backend:/app
+      - ./logs:/app/logs
+    networks:
+      - quiosque_network_$client_id
+    depends_on:
+      - postgres_$client_id
+      - redis_$client_id
+    restart: unless-stopped
+
+  postgres_$client_id:
+    image: postgres:15
+    container_name: quiosque_postgres_$client_id
+    ports:
+      - "0:5432"  # Docker escolhe porta disponível
+    environment:
+      - POSTGRES_DB=quiosque_$client_id
+      - POSTGRES_USER=quiosque_$client_id
+      - POSTGRES_PASSWORD=\${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data_$client_id:/var/lib/postgresql/data
+      - ./backups:/backups
+    networks:
+      - quiosque_network_$client_id
+    restart: unless-stopped
+
+  redis_$client_id:
+    image: redis:7-alpine
+    container_name: quiosque_redis_$client_id
+    ports:
+      - "0:6379"  # Docker escolhe porta disponível
+    command: redis-server --requirepass \${REDIS_PASSWORD}
+    volumes:
+      - redis_data_$client_id:/data
+    networks:
+      - quiosque_network_$client_id
+    restart: unless-stopped
+
+volumes:
+  postgres_data_$client_id:
+  redis_data_$client_id:
+
+networks:
+  quiosque_network_$client_id:
+    driver: bridge
+EOF
+
+    log_color $GREEN "✅ Docker-compose criado com sucesso!"
+}
+
+# Função para fazer deploy
+deploy_client() {
+    local client_id="$1"
+    local client_name="$2"
+    
+    log_color $BLUE "🚀 Fazendo deploy do cliente '$client_name'..."
+    
+    # Fazer deploy
+    log_color $BLUE "🐳 Iniciando containers..."
+    docker compose -f "docker-compose.$client_id.yml" up -d --build
+    
+    # Aguardar containers iniciarem
+    log_color $BLUE "⏳ Aguardando containers iniciarem..."
+    sleep 10
+    
+    # Verificar status dos containers
+    log_color $BLUE "🔍 Verificando status dos containers..."
+    docker compose -f "docker-compose.$client_id.yml" ps
+    
+    log_color $GREEN "✅ Deploy concluído com sucesso!"
+}
+
+# Função para configurar proxy reverso no Nginx
+configure_nginx_proxy() {
+    local client_id="$1"
+    local domain="$2"
+    local frontend_port="$3"
+    local backend_port="$4"
+    
+    log_color $BLUE "🌐 Configurando proxy reverso no Nginx..."
+    
+    # Verificar se o arquivo de configuração do Nginx existe
+    local nginx_config="/etc/nginx/sites-available/default"
+    
+    if [[ ! -f "$nginx_config" ]]; then
+        log_color $RED "❌ Arquivo de configuração do Nginx não encontrado!"
+        log_color $YELLOW "⚠️ Execute primeiro: sudo ./scripts/setup-vps.sh -d $domain -e seu_email@exemplo.com"
+        return 1
+    fi
+    
+    # Criar backup da configuração atual
+    cp "$nginx_config" "${nginx_config}.backup.$(date +%Y%m%d_%H%M%S)"
+    
+    # Adicionar configuração do subdomínio
+    local subdomain="${client_id}.${domain}"
+    
+    # Verificar se o subdomínio já está configurado
+    if grep -q "if (\$host = \"$subdomain\")" "$nginx_config"; then
+        log_color $YELLOW "⚠️ Subdomínio $subdomain já está configurado no Nginx"
+        log_color $BLUE "🔄 Atualizando configuração existente..."
+        
+        # Remover configuração existente
+        sed -i "/# BEGIN: $subdomain/,/# END: $subdomain/d" "$nginx_config"
+    fi
+    
+    # Adicionar nova configuração
+    local proxy_config="
+    # BEGIN: $subdomain
+    if (\$host = \"$subdomain\") {
+        location / {
+            proxy_pass http://localhost:$frontend_port;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            
+            # Configurações para SPA
+            try_files \$uri \$uri/ /index.html;
+            
+            # Timeouts
+            proxy_connect_timeout 60s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+            
+            # Buffer settings
+            proxy_buffering on;
+            proxy_buffer_size 4k;
+            proxy_buffers 8 4k;
+        }
+        
+        # API calls para o backend
+        location /api/ {
+            proxy_pass http://localhost:$backend_port;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            
+            # Configurações para API
+            proxy_connect_timeout 60s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+        }
+        
+        # Documentação da API
+        location /docs {
+            proxy_pass http://localhost:$backend_port;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
+        
+        # Health check específico do cliente
+        location /health {
+            proxy_pass http://localhost:$backend_port;
+            proxy_set_header Host \$host;
+        }
+    }
+    # END: $subdomain"
+    
+    # Inserir configuração antes do último }
+    sed -i "s|    # Padrão: redirecionar para página de erro ou domínio principal|$proxy_config\n    # Padrão: redirecionar para página de erro ou domínio principal|" "$nginx_config"
+    
+    # Testar configuração do Nginx
+    if nginx -t; then
+        # Recarregar Nginx
+        systemctl reload nginx
+        log_color $GREEN "✅ Proxy reverso configurado com sucesso!"
+        log_color $GREEN "🌐 Subdomínio: $subdomain"
+        log_color $GREEN "   • Frontend: http://$subdomain (porta $frontend_port)"
+        log_color $GREEN "   • Backend: http://$subdomain/api (porta $backend_port)"
+    else
+        log_color $RED "❌ Erro na configuração do Nginx"
+        log_color $YELLOW "🔄 Restaurando backup..."
+        cp "${nginx_config}.backup.$(date +%Y%m%d_%H%M%S)" "$nginx_config"
+        return 1
+    fi
+}
+
+# Função para mostrar resumo final
+show_summary() {
+    local client_name="$1"
+    local client_id="$2"
+    local domain="$3"
+    
+    log_color $GREEN "🎉 CLIENTE CRIADO E CONFIGURADO COM SUCESSO!"
+    log_color $GREEN "============================================="
+    
+    echo
+    log_color $BLUE "📋 RESUMO DO CLIENTE:"
+    log_color $BLUE "   Nome: $client_name"
+    log_color $BLUE "   ID: $client_id"
+    log_color $BLUE "   Domínio: $domain"
+    
+    echo
+    log_color $BLUE "🌐 URLs DE ACESSO:"
+    local subdomain="${client_id}.${domain}"
+    log_color $BLUE "   • Frontend: http://$subdomain"
+    log_color $BLUE "   • Backend API: http://$subdomain/api"
+    log_color $BLUE "   • Documentação: http://$subdomain/docs"
+    
+    echo
+    log_color $BLUE "🔧 PORTAS DOCKER:"
+    log_color $BLUE "   • Frontend: $FRONTEND_PORT_CHOSEN"
+    log_color $BLUE "   • Backend: $BACKEND_PORT_CHOSEN"
+    log_color $BLUE "   • PostgreSQL: $POSTGRES_PORT_CHOSEN"
+    log_color $BLUE "   • Redis: $REDIS_PORT_CHOSEN"
+    
+    echo
+    log_color $BLUE "📁 ARQUIVOS CRIADOS:"
+    log_color $BLUE "   • .env"
+    log_color $BLUE "   • docker-compose.$client_id.yml"
+    
+    echo
+    log_color $BLUE "🔒 CREDENCIAIS PADRÃO:"
+    log_color $BLUE "   • Usuário: admin"
+    log_color $BLUE "   • Senha: admin123"
+    
+    echo
+    log_color $GREEN "🎯 CLIENTE PRONTO PARA USO!"
+    log_color $GREEN "Acesse: http://$subdomain"
 }
 
 # Função para mostrar ajuda
 show_help() {
-    echo "🚀 Script Unificado: Criação e Deploy Automático"
-    echo "================================================"
+    echo "🚀 Script Unificado: Criação e Deploy Automático (REFATORADO)"
+    echo "============================================================="
     echo
     echo "Uso: $0 [OPÇÕES]"
     echo
@@ -290,7 +584,6 @@ show_help() {
     echo "  -d, --domain DOMAIN    Domínio (ex: 'exemplo.com')"
     echo "  -r, --restaurant NAME  Nome do restaurante (ex: 'Restaurante Exemplo Ltda')"
     echo "  -e, --email EMAIL      Email para SSL (ex: 'admin@exemplo.com')"
-    echo "  -p, --ports            Configurar portas personalizadas"
     echo "  -h, --help             Mostrar esta ajuda"
     echo
     echo "EXEMPLOS:"
@@ -298,347 +591,21 @@ show_help() {
     echo "  $0 -n 'Sabor Brasileiro' -i 'saborbrasileiro' -d 'saborbrasileiro.com' -e 'admin@saborbrasileiro.com'"
     echo "  $0 -n 'Meu Restaurante' -i 'meurestaurante' -r 'Meu Restaurante Ltda' -d 'meurestaurante.com' -e 'admin@meurestaurante.com'"
     echo
-    echo "📚 Para deploy em VPS Ubuntu, use: scripts/setup-vps-complete.sh"
+    echo "🔍 PORTAS AUTOMÁTICAS DO DOCKER:"
+    echo "   O Docker escolhe automaticamente as portas disponíveis"
+    echo "   e o script configura o proxy reverso do Nginx automaticamente"
     echo
-    echo "🔍 DETECÇÃO AUTOMÁTICA DE PORTAS:"
-echo "   O script verifica automaticamente se as portas padrão estão ocupadas"
-echo "   e escolhe as próximas portas disponíveis automaticamente"
-echo
-echo "🔧 DEPENDÊNCIAS AUTOMÁTICAS:"
-echo "   O script verifica e instala automaticamente todas as dependências"
-echo "   necessárias (ss, netstat, grep, docker, docker-compose)"
+    echo "🔧 DEPENDÊNCIAS AUTOMÁTICAS:"
+    echo "   O script verifica e instala automaticamente todas as dependências"
+    echo "   necessárias (docker, docker-compose, grep, sed)"
     echo
     echo "🔄 VERIFICAÇÃO DE CLIENTES EXISTENTES:"
     echo "   Se um cliente com o mesmo ID já existir, o script pergunta"
     echo "   se deseja recriar (remove tudo e cria novamente)"
     echo
-}
-
-# Função para gerar senhas seguras
-generate_password() {
-    openssl rand -base64 24 | tr -d "=+/" | cut -c1-25
-}
-
-# Função para gerar chave secreta
-generate_secret_key() {
-    openssl rand -base64 32
-}
-
-# Função para criar arquivo de ambiente
-create_env_file() {
-    local client_name="$1"
-    local client_id="$2"
-    local domain="$3"
-    local restaurant_name="$4"
-    
-    log_color $BLUE "📝 Criando arquivo de ambiente: .env"
-    
-    # Gerar credenciais seguras
-    local db_password=$(generate_password)
-    local redis_password=$(generate_password)
-    local secret_key=$(generate_secret_key)
-    
-    # Salvar credenciais para exibição posterior
-    DB_PASSWORD="$db_password"
-    REDIS_PASSWORD="$redis_password"
-    SECRET_KEY="$secret_key"
-    
-    # Usar portas escolhidas ou padrões se não foram configuradas
-    local frontend_port=${FRONTEND_PORT_CHOSEN:-80}
-    local backend_port=${BACKEND_PORT_CHOSEN:-8000}
-    local postgres_port=${POSTGRES_PORT_CHOSEN:-5432}
-    local redis_port=${REDIS_PORT_CHOSEN:-6379}
-    
-    # Criar arquivo .env
-    cat > ".env" << EOF
-# ========================================
-# CONFIGURACOES DE PRODUCAO - SISTEMA DE QUIOSQUE
-# ========================================
-#
-# IMPORTANTE: Este arquivo contem configuracoes especificas do cliente
-# NUNCA commitar este arquivo no Git!
-
-# ========================================
-# IDENTIFICACAO DO CLIENTE
-# ========================================
-CLIENT_NAME=$client_name
-CLIENT_ID=$client_id
-ENVIRONMENT=production
-
-# ========================================
-# CONFIGURACOES DO BANCO DE DADOS
-# ========================================
-POSTGRES_DB=quiosque_$client_id
-POSTGRES_USER=quiosque_$client_id
-POSTGRES_PASSWORD=$db_password
-POSTGRES_HOST=postgres_$client_id
-POSTGRES_PORT=$postgres_port
-DATABASE_URL=postgresql://quiosque_$client_id:$db_password@postgres_$client_id:$postgres_port/quiosque_$client_id
-
-# ========================================
-# CONFIGURACOES DE SEGURANCA
-# ========================================
-SECRET_KEY=$secret_key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# ========================================
-# CONFIGURACOES DE CORS
-# ========================================
-CORS_ORIGINS=http://localhost:$frontend_port,http://localhost:3000
-CORS_ALLOW_CREDENTIALS=true
-
-# ========================================
-# CONFIGURACOES REDIS
-# ========================================
-REDIS_HOST=redis_$client_id
-REDIS_PORT=$redis_port
-REDIS_PASSWORD=$redis_password
-
-# ========================================
-# CONFIGURACOES DO SERVIDOR
-# ========================================
-HOST=0.0.0.0
-PORT=$backend_port
-
-# ========================================
-# CONFIGURACOES DO FRONTEND (VITE)
-# ========================================
-VITE_API_BASE_URL=http://localhost:$backend_port
-VITE_DEBUG=false
-
-# ========================================
-# CONFIGURACOES DE NEGOCIO
-# ========================================
-RESTAURANT_NAME=$restaurant_name
-
-# ========================================
-# CONFIGURACOES DE PORTAS (OPCIONAL)
-# ========================================
-BACKEND_PORT=$backend_port
-FRONTEND_PORT=$frontend_port
-POSTGRES_PORT=$postgres_port
-REDIS_PORT=$redis_port
-EOF
-
-    log_color $GREEN "✅ Arquivo de ambiente criado: .env"
-}
-
-# Função para criar docker-compose
-create_docker_compose() {
-    local client_id="$1"
-    local compose_file="docker-compose.$client_id.yml"
-    
-    log_color $BLUE "🐳 Criando docker-compose: $compose_file"
-    
-    cat > "$compose_file" << EOF
-version: '3.8'
-
-services:
-  # PostgreSQL do cliente
-  postgres_$client_id:
-    image: postgres:15
-    container_name: quiosque_postgres_$client_id
-    environment:
-      POSTGRES_DB: quiosque_$client_id
-      POSTGRES_USER: quiosque_$client_id
-      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
-    ports:
-      - "\${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres_data_$client_id:/var/lib/postgresql/data
-    restart: unless-stopped
-    networks:
-      - quiosque_network_$client_id
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U quiosque_$client_id -d quiosque_$client_id"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis do cliente
-  redis_$client_id:
-    image: redis:7-alpine
-    container_name: quiosque_redis_$client_id
-    ports:
-      - "\${REDIS_PORT:-6379}:6379"
-    restart: unless-stopped
-    networks:
-      - quiosque_network_$client_id
-
-  # Backend do cliente
-  backend_$client_id:
-    build: ./backend
-    container_name: quiosque_backend_$client_id
-    environment:
-      - DATABASE_URL=\${DATABASE_URL}
-      - SECRET_KEY=\${SECRET_KEY}
-      - ALGORITHM=\${ALGORITHM}
-      - ACCESS_TOKEN_EXPIRE_MINUTES=\${ACCESS_TOKEN_EXPIRE_MINUTES}
-      - REDIS_HOST=\${REDIS_HOST}
-      - REDIS_PORT=\${REDIS_PORT}
-      - REDIS_PASSWORD=\${REDIS_PASSWORD}
-      - CORS_ORIGINS=\${CORS_ORIGINS}
-      - CORS_ALLOW_CREDENTIALS=\${CORS_ALLOW_CREDENTIALS}
-    ports:
-      - "\${BACKEND_PORT:-8000}:8000"
-    depends_on:
-      postgres_$client_id:
-        condition: service_healthy
-      redis_$client_id:
-        condition: service_started
-    restart: unless-stopped
-    networks:
-      - quiosque_network_$client_id
-    volumes:
-      - ./logs:/app/logs
-
-  # Frontend do cliente
-  frontend_$client_id:
-    build: ./frontend
-    container_name: quiosque_frontend_$client_id
-    ports:
-      - "\${FRONTEND_PORT:-80}:80"
-    depends_on:
-      - backend_$client_id
-    restart: unless-stopped
-    networks:
-      - quiosque_network_$client_id
-
-networks:
-  quiosque_network_$client_id:
-    driver: bridge
-
-volumes:
-  postgres_data_$client_id:
-EOF
-
-    log_color $GREEN "✅ Docker-compose criado: $compose_file"
-}
-
-# Função para fazer deploy
-deploy_client() {
-    local client_id="$1"
-    local client_name="$2"
-    local compose_file="docker-compose.$client_id.yml"
-    
-    log_color $BLUE "🚀 Iniciando deploy para cliente: $client_name"
-    
-    # Verificar se os arquivos existem
-    if [[ ! -f ".env" ]]; then
-        log_color $RED "❌ Arquivo .env não encontrado!"
-        exit 1
-    fi
-    
-    if [[ ! -f "$compose_file" ]]; then
-        log_color $RED "❌ Arquivo $compose_file não encontrado!"
-        exit 1
-    fi
-    
-    # Parar serviços existentes (se houver)
-    log_color $BLUE "🛑 Parando serviços existentes..."
-    docker compose -f "$compose_file" down 2>/dev/null || true
-    
-    # Build das imagens
-    log_color $BLUE "🔨 Fazendo build das imagens..."
-    docker compose -f "$compose_file" build
-    
-    # Subir serviços
-    log_color $BLUE "🚀 Subindo serviços..."
-    docker compose -f "$compose_file" up -d
-    
-    # Aguardar serviços estarem prontos
-    log_color $BLUE "⏳ Aguardando serviços estarem prontos..."
-    sleep 15
-    
-    # Verificar status
-    log_color $BLUE "📊 Verificando status dos serviços..."
-    docker compose -f "$compose_file" ps
-    
-    log_color $GREEN "🎉 Deploy concluído para cliente: $client_name"
-    log_color $BLUE "🌐 Frontend: http://localhost:${FRONTEND_PORT_CHOSEN:-80}"
-    log_color $BLUE "🔧 Backend: http://localhost:${BACKEND_PORT_CHOSEN:-8000}"
-    log_color $BLUE "🗄️ Banco: localhost:${POSTGRES_PORT_CHOSEN:-5432}"
-    log_color $BLUE "📝 Redis: localhost:${REDIS_PORT_CHOSEN:-6379}"
-}
-
-# Função para deploy automático do subdomínio
-deploy_subdomain() {
-    local client_id="$1"
-    local client_name="$2"
-    local domain="$3"
-    local email="$4"
-    
-    log_color $BLUE "🌐 Iniciando deploy automático do subdomínio..."
-    
-    # Verificar se o script de deploy do subdomínio existe
-    if [ -f "scripts/deploy-subdomain.sh" ]; then
-        log_color $BLUE "📥 Script de deploy do subdomínio encontrado"
-        
-        # Tornar executável
-        chmod +x scripts/deploy-subdomain.sh
-        
-        # Obter porta do frontend das portas escolhidas
-        local frontend_port=${FRONTEND_PORT_CHOSEN:-80}
-        
-        log_color $BLUE "🔧 Configurando subdomínio: ${client_id}.${domain}"
-        log_color $BLUE "🔌 Porta detectada: ${frontend_port}"
-        
-        # Executar script de deploy do subdomínio
-        if sudo scripts/deploy-subdomain.sh -d "$domain" -s "$client_id" -p "$frontend_port" -e "$email"; then
-            log_color $GREEN "✅ Deploy do subdomínio concluído com sucesso!"
-            log_color $GREEN "🌐 Acesse: https://${client_id}.${domain}"
-        else
-            log_color $YELLOW "⚠️ Deploy do subdomínio falhou, mas o cliente foi criado"
-            log_color $YELLOW "🔧 Execute manualmente: sudo scripts/deploy-subdomain.sh -d '$domain' -s '$client_id' -p '$frontend_port' -e '$email'"
-        fi
-    else
-        log_color $YELLOW "⚠️ Script de deploy do subdomínio não encontrado"
-        log_color $YELLOW "📥 Baixe o script: scripts/deploy-subdomain.sh"
-    fi
-}
-
-# Função para mostrar resumo final
-show_summary() {
-    local client_name="$1"
-    local client_id="$2"
-    
-    log_color $GREEN "🎉 CLIENTE CRIADO E DEPLOYADO COM SUCESSO!"
-    log_color $GREEN "=============================================="
-    
-    echo
-    log_color $BLUE "📁 Arquivos criados:"
-    log_color $BLUE "   • .env"
-    log_color $BLUE "   • docker-compose.$client_id.yml"
-    
-    echo
-    log_color $BLUE "🔑 Credenciais geradas:"
-    log_color $BLUE "   • Senha do Banco: $DB_PASSWORD"
-    log_color $BLUE "   • Senha do Redis: $REDIS_PASSWORD"
-    log_color $BLUE "   • Chave Secreta: $SECRET_KEY"
-    
-    echo
-    log_color $BLUE "🚀 Para gerenciar o cliente:"
-    log_color $BLUE "   • Ver status: docker compose -f docker-compose.$client_id.yml ps"
-    log_color $BLUE "   • Ver logs: docker compose -f docker-compose.$client_id.yml logs -f"
-    log_color $BLUE "   • Parar: docker compose -f docker-compose.$client_id.yml down"
-    log_color $BLUE "   • Reiniciar: docker compose -f docker-compose.$client_id.yml restart"
-    
-    echo
-    log_color $GREEN "🌐 PORTAS CONFIGURADAS:"
-    log_color $GREEN "   • Frontend: http://localhost:${FRONTEND_PORT_CHOSEN:-80}"
-    log_color $GREEN "   • Backend: http://localhost:${BACKEND_PORT_CHOSEN:-8000}"
-    log_color $GREEN "   • PostgreSQL: localhost:${POSTGRES_PORT_CHOSEN:-5432}"
-    log_color $GREEN "   • Redis: localhost:${REDIS_PORT_CHOSEN:-6379}"
-    
-    echo
-    log_color $YELLOW "⚠️ IMPORTANTE:"
-    log_color $YELLOW "   • Salve as credenciais em local seguro"
-    log_color $YELLOW "   • Nunca commite o arquivo .env no Git"
-    log_color $YELLOW "   • Configure as portas no arquivo .env se necessário"
-    
-    echo
-    log_color $GREEN "📚 Para deploy em VPS Ubuntu, use: sudo ./scripts/setup-vps.sh -d DOMAIN -e EMAIL"
+    echo "🌐 PROXY REVERSO AUTOMÁTICO:"
+    echo "   O script configura automaticamente o proxy reverso do Nginx"
+    echo "   para o subdomínio do cliente, incluindo frontend e backend"
 }
 
 # Função principal
@@ -679,10 +646,6 @@ main() {
                 EMAIL="$2"
                 shift 2
                 ;;
-            -p|--ports)
-                configure_available_ports
-                shift
-                ;;
             -h|--help)
                 show_help
                 exit 0
@@ -716,8 +679,8 @@ main() {
     fi
     
     # Mostrar resumo da criação
-    log_color $GREEN "🎯 SCRIPT UNIFICADO: CRIAÇÃO E DEPLOY AUTOMÁTICO"
-    log_color $GREEN "=================================================="
+    log_color $GREEN "🎯 SCRIPT UNIFICADO: CRIAÇÃO E DEPLOY AUTOMÁTICO (REFATORADO)"
+    log_color $GREEN "================================================================="
     echo
     log_color $BLUE "📋 RESUMO DA CRIAÇÃO:"
     log_color $BLUE "   Nome do Cliente: $CLIENT_NAME"
@@ -740,34 +703,45 @@ main() {
     check_and_install_dependencies
     
     # Verificar se cliente já existe
+    log_color $BLUE "🔍 Chamando check_client_exists..."
     check_client_exists "$CLIENT_ID"
+    log_color $BLUE "✅ check_client_exists concluído"
     
-    # Verificar e configurar portas disponíveis
-    configure_available_ports
+    # Configurar portas automáticas do Docker
+    log_color $BLUE "🔍 Chamando configure_docker_ports..."
+    configure_docker_ports
+    log_color $BLUE "✅ configure_docker_ports concluído"
     
     # Criar arquivo de ambiente
+    log_color $BLUE "🔍 Chamando create_env_file..."
     create_env_file "$CLIENT_NAME" "$CLIENT_ID" "$DOMAIN" "$RESTAURANT_NAME"
+    log_color $BLUE "✅ create_env_file concluído"
     
     # Criar docker-compose
+    log_color $BLUE "🔍 Chamando create_docker_compose..."
     create_docker_compose "$CLIENT_ID"
+    log_color $BLUE "✅ create_docker_compose concluído"
     
     # Fazer deploy
+    log_color $BLUE "🔍 Chamando deploy_client..."
     deploy_client "$CLIENT_ID" "$CLIENT_NAME"
+    log_color $BLUE "✅ deploy_client concluído"
     
-    # Deploy automático do subdomínio se domínio e email foram fornecidos
-    if [[ -n "$DOMAIN" && -n "$EMAIL" ]]; then
-        log_color $BLUE "🌐 Domínio e email fornecidos, iniciando deploy automático do subdomínio..."
-        deploy_subdomain "$CLIENT_ID" "$CLIENT_NAME" "$DOMAIN" "$EMAIL"
+    # Obter portas escolhidas pelo Docker
+    log_color $BLUE "🔍 Chamando get_docker_ports..."
+    get_docker_ports "$CLIENT_ID"
+    log_color $BLUE "✅ get_docker_ports concluído"
+    
+    # Configurar proxy reverso no Nginx se domínio foi fornecido
+    if [[ -n "$DOMAIN" && "$DOMAIN" != "localhost" ]]; then
+        log_color $BLUE "🌐 Domínio fornecido, configurando proxy reverso no Nginx..."
+        configure_nginx_proxy "$CLIENT_ID" "$DOMAIN" "$FRONTEND_PORT_CHOSEN" "$BACKEND_PORT_CHOSEN"
     else
-        log_color $YELLOW "⚠️ Domínio ou email não fornecidos, deploy do subdomínio será manual"
-        if [[ -n "$DOMAIN" ]]; then
-            log_color $BLUE "🔧 Para configurar subdomínio manualmente:"
-            log_color $BLUE "   sudo scripts/deploy-subdomain.sh -d '$DOMAIN' -s '$CLIENT_ID' -e 'seu_email@exemplo.com'"
-        fi
+        log_color $YELLOW "⚠️ Domínio não fornecido, proxy reverso não será configurado"
     fi
     
     # Mostrar resumo final
-    show_summary "$CLIENT_NAME" "$CLIENT_ID"
+    show_summary "$CLIENT_NAME" "$CLIENT_ID" "$DOMAIN"
 }
 
 # Executar função principal
