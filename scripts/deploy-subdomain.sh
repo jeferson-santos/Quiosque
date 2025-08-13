@@ -41,6 +41,10 @@ show_help() {
     echo "  $0 -d meudominio.com -s bater_do_mar -p 80 -e 'admin@meudominio.com'"
     echo "  $0 -d meudominio.com -s saborbrasileiro -p 8080 -e 'admin@meudominio.com' -t"
     echo
+    echo "🔄 VERIFICAÇÃO DE SUBDOMÍNIOS EXISTENTES:"
+    echo "   Se o subdomínio já estiver configurado, o script pergunta"
+    echo "   se deseja recriar (remove configuração atual e cria novamente)"
+    echo
 }
 
 # Função para verificar pré-requisitos
@@ -194,6 +198,105 @@ check_client_exists() {
         log_color $RED "❌ Execute primeiro o script create-and-deploy.sh"
         return 1
     fi
+}
+
+# Função para verificar se o subdomínio já está configurado no nginx
+check_subdomain_exists() {
+    local domain="$1"
+    local subdomain="$2"
+    local nginx_config="/etc/nginx/sites-available/default"
+    
+    if [ -f "$nginx_config" ]; then
+        if grep -q "if (\$host = \"${subdomain}.${domain}\")" "$nginx_config"; then
+            log_color $YELLOW "⚠️ Subdomínio '${subdomain}.${domain}' já está configurado no nginx!"
+            echo
+            log_color $BLUE "📋 Configuração encontrada em: $nginx_config"
+            
+            # Verificar se o site está habilitado
+            if [ -L "/etc/nginx/sites-enabled/default" ]; then
+                log_color $BLUE "   • Site habilitado no nginx"
+            else
+                log_color $YELLOW "   • Site não está habilitado"
+            fi
+            
+            # Verificar se o SSL está configurado
+            if [ -d "/etc/letsencrypt/live/${subdomain}.${domain}" ]; then
+                log_color $GREEN "   • SSL/HTTPS já configurado"
+            else
+                log_color $BLUE "   • SSL/HTTPS não configurado"
+            fi
+            
+            echo
+            read -p "❓ Deseja recriar o subdomínio '${subdomain}.${domain}'? Isso irá REMOVER a configuração atual! (S/N): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Ss]$ ]]; then
+                log_color $YELLOW "🗑️ Recriando subdomínio '${subdomain}.${domain}'..."
+                remove_existing_subdomain "$domain" "$subdomain"
+                return 0
+            else
+                log_color $YELLOW "❌ Operação cancelada pelo usuário"
+                exit 0
+            fi
+        fi
+    fi
+    
+    return 1
+}
+
+# Função para remover subdomínio existente
+remove_existing_subdomain() {
+    local domain="$1"
+    local subdomain="$2"
+    
+    log_color $RED "🗑️ Removendo subdomínio existente '${subdomain}.${domain}'..."
+    
+    # Remover configuração do nginx
+    log_color $BLUE "🗑️ Removendo configuração do nginx..."
+    local nginx_config="/etc/nginx/sites-available/default"
+    
+    if [ -f "$nginx_config" ]; then
+        # Criar backup da configuração atual
+        local backup_file="/etc/nginx/sites-available/default.backup.$(date +%Y%m%d_%H%M%S)"
+        sudo cp "$nginx_config" "$backup_file"
+        log_color $BLUE "   • Backup criado: $backup_file"
+        
+        # Remover configuração do subdomínio específico
+        sudo sed -i "/# Subdomínio: ${subdomain}/,/^    }$/d" "$nginx_config"
+        sudo sed -i "/# Subdomínio HTTPS: ${subdomain}/,/^    }$/d" "$nginx_config"
+        
+        # Limpar linhas vazias
+        sudo sed -i '/^[[:space:]]*$/d' "$nginx_config"
+        
+        log_color $GREEN "   • Configuração do nginx atualizada"
+    fi
+    
+    # Remover certificado SSL (se existir)
+    if [ -d "/etc/letsencrypt/live/${subdomain}.${domain}" ]; then
+        log_color $BLUE "🗑️ Removendo certificado SSL..."
+        sudo certbot delete --cert-name "${subdomain}.${domain}" --non-interactive 2>/dev/null || true
+        log_color $GREEN "   • Certificado SSL removido"
+    fi
+    
+    # Remover logs específicos do subdomínio
+    log_color $BLUE "🗑️ Removendo logs específicos..."
+    sudo rm -f "/var/log/nginx/${subdomain}.${domain}.access.log"
+    sudo rm -f "/var/log/nginx/${subdomain}.${domain}.error.log"
+    
+    # Testar e recarregar nginx
+    log_color $BLUE "🔧 Testando configuração do nginx..."
+    if sudo nginx -t; then
+        sudo systemctl reload nginx
+        log_color $GREEN "   • Nginx recarregado com sucesso"
+    else
+        log_color $RED "   • Erro na configuração do nginx"
+        log_color $YELLOW "   • Restaurando backup..."
+        sudo cp "$backup_file" "$nginx_config"
+        sudo nginx -t && sudo systemctl reload nginx
+        log_color $GREEN "   • Backup restaurado e nginx recarregado"
+    fi
+    
+    log_color $GREEN "✅ Subdomínio '${subdomain}.${domain}' removido completamente!"
+    echo
 }
 
 # Função para verificar status do cliente
@@ -377,6 +480,7 @@ main() {
     check_prerequisites
     check_client_exists "$SUBDOMAIN"
     check_client_status "$SUBDOMAIN"
+    check_subdomain_exists "$DOMAIN" "$SUBDOMAIN"
     setup_nginx_subdomain "$DOMAIN" "$SUBDOMAIN" "$PORT"
     setup_ssl_subdomain "$DOMAIN" "$SUBDOMAIN" "$EMAIL" "$TEST_MODE"
     configure_environment "$DOMAIN" "$SUBDOMAIN" "$PORT"
