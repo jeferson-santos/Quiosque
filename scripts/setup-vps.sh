@@ -246,7 +246,7 @@ global:
 
 entryPoints:
   web:
-    address: ":8080"
+    address: ":8081"
     http:
       redirections:
         entryPoint:
@@ -255,7 +255,7 @@ entryPoints:
           permanent: true
   
   websecure:
-    address: ":8443"
+    address: ":8444"
 
 providers:
   docker:
@@ -300,8 +300,8 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "8080:8080"
-      - "8443:8443"
+      - "8081:8081"
+      - "8444:8444"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -405,7 +405,7 @@ EOF
             <h3>🔧 Ferramentas Disponíveis</h3>
             <p>• <strong>Portainer:</strong> <a href="https://portainer.${domain}" target="_blank">https://portainer.${domain}</a></p>
             <p>• <strong>Traefik Dashboard:</strong> <a href="https://traefik.${domain}" target="_blank">https://traefik.${domain}</a></p>
-            <p>• <strong>Traefik Portas:</strong> 8080 (HTTP) / 8443 (HTTPS)</p>
+            <p>• <strong>Traefik Portas:</strong> 8081 (HTTP) / 8444 (HTTPS)</p>
         </div>
         
         <div class="info">
@@ -663,7 +663,7 @@ show_summary() {
     echo
     log_color $BLUE "🔧 PORTAS DOS SERVIÇOS:"
     log_color $BLUE "   • Nginx: 80/443 (domínio principal)"
-    log_color $BLUE "   • Traefik: 8080/8443 (proxy reverso)"
+    log_color $BLUE "   • Traefik: 8081/8444 (proxy reverso)"
     log_color $BLUE "   • Portainer: 9000 (via Traefik)"
     
     echo
