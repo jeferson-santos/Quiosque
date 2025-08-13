@@ -1,10 +1,10 @@
 #!/bin/bash
 # ========================================
-# SCRIPT PARA CONFIGURAÇÃO COMPLETA DA VPS (TUDO EM UM!)
+# SCRIPT PARA CONFIGURAÇÃO COMPLETA DA VPS (ARQUITETURA LIMPA!)
 # ========================================
 # Este script configura uma VPS Ubuntu completa para o Sistema de Quiosque
-# Inclui: Docker, Nginx, SSL para domínio principal E subdomínios
-# Substitui o antigo generate-nginx-config.sh - agora tudo está aqui!
+# Inclui: Docker, Nginx, SSL para domínio principal
+# Subdomains são gerenciados pelo create-and-deploy.sh (arquivos separados)
 # DEVE ser executado como root
 
 set -e
@@ -46,8 +46,8 @@ show_help() {
     echo
     echo "🎯 ESTE SCRIPT CONFIGURA TUDO:"
     echo "   ✅ VPS básica (Docker, Nginx, SSL)"
-    echo "   ✅ Nginx para domínio principal"
-    echo "   ✅ Nginx para subdomínios (antigo generate-nginx-config.sh)"
+    echo "   ✅ Nginx para domínio principal (arquitetura limpa)"
+    echo "   ✅ Subdomains gerenciados pelo create-and-deploy.sh"
     echo "   ✅ Backup e monitoramento automático"
     echo
 }
@@ -284,105 +284,81 @@ EOF
     fi
 }
 
-# Função para configurar Nginx para subdomínios (antigo generate-nginx-config.sh)
-setup_nginx_subdomains() {
+# Função para configurar Nginx com arquitetura limpa (sem subdomains)
+setup_nginx_clean() {
     local domain="$1"
     
-    log_color $BLUE "🌐 Configurando Nginx para subdomínios..."
+    log_color $BLUE "🌐 Configurando Nginx com arquitetura limpa..."
     
-    # Criar configuração principal do nginx para capturar todos os subdomínios
+    # Criar configuração principal do nginx APENAS para o domínio principal
     cat > "/etc/nginx/sites-available/default" << EOF
 # ========================================
-# CONFIGURAÇÃO PRINCIPAL DO NGINX PARA SUBDOMÍNIOS
+# CONFIGURAÇÃO PRINCIPAL DO NGINX - DOMÍNIO PRINCIPAL
 # ========================================
 # Gerado automaticamente pelo setup-vps.sh
 # Data: $(date)
 # Domínio: ${domain}
+# ARQUITETURA: Cada subdomain terá seu próprio arquivo
 
-# Configuração principal do servidor HTTP
+# Servidor HTTP - Redirecionar para HTTPS
 server {
     listen 80;
-    server_name _;  # Captura todos os domínios
+    server_name ${domain} www.${domain};
     
-    # Logs principais
-    access_log /var/log/nginx/main.access.log;
-    error_log /var/log/nginx/main.error.log;
+    # Logs do domínio principal
+    access_log /var/log/nginx/${domain}.access.log;
+    error_log /var/log/nginx/${domain}.error.log;
     
-    # Configuração para subdomínios dinâmicos
-    # O nginx vai redirecionar baseado no host header
+    # Redirecionar tudo para HTTPS
+    return 301 https://\$server_name\$request_uri;
+}
+
+# Servidor HTTPS - Domínio principal
+server {
+    listen 443 ssl http2;
+    server_name ${domain} www.${domain};
     
-    # EXEMPLO DE CONFIGURAÇÃO (COMENTADO):
-    # if (\$host = "exemplo.${domain}") {
-    #     location / {
-    #         proxy_pass http://localhost:8080;  # Porta do frontend do cliente
-    #         proxy_set_header Host \$host;
-    #         proxy_set_header X-Real-IP \$remote_addr;
-    #         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    #         proxy_set_header X-Forwarded-Proto \$scheme;
-    #         
-    #         # Configurações para SPA
-    #         try_files \$uri \$uri/ /index.html;
-    #         
-    #         # Timeouts
-    #         proxy_connect_timeout 60s;
-    #         proxy_send_timeout 60s;
-    #         proxy_read_timeout 60s;
-    #         
-    #         # Buffer settings
-    #         proxy_buffering on;
-    #         proxy_buffer_size 4k;
-    #         proxy_buffers 8 4k;
-    #     }
-    #     
-    #     # API calls para o backend
-    #     location /api/ {
-    #         proxy_pass http://localhost:8000;  # Porta do backend do cliente
-    #         proxy_set_header Host \$host;
-    #         proxy_set_header X-Real-IP \$remote_addr;
-    #         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    #         proxy_set_header X-Forwarded-Proto \$scheme;
-    #         
-    #         # Configurações para API
-    #         proxy_connect_timeout 60s;
-    #         proxy_send_timeout 60s;
-    #         proxy_read_timeout 60s;
-    #     }
-    #     
-    #     # Documentação da API
-    #     location /docs {
-    #         proxy_pass http://localhost:8000;
-    #         proxy_set_header Host \$host;
-    #         proxy_set_header X-Real-IP \$remote_addr;
-    #         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    #         proxy_set_header X-Forwarded-Proto \$scheme;
-    #     }
-    #     
-    #     # Health check específico do cliente
-    #     location /health {
-    #         proxy_pass http://localhost:8000;
-    #         proxy_set_header Host \$host;
-    #     }
-    # }
-    
-    # Padrão: redirecionar para página de erro ou domínio principal
+    # Página de boas-vindas do sistema
     location / {
-        return 404 "Subdomínio não configurado. Use o script create-and-deploy.sh para configurar.";
+        return 200 "🚀 Sistema de Quiosques - ${domain}
+
+✅ VPS configurada com sucesso!
+✅ Docker, Nginx e SSL funcionando
+✅ Use create-and-deploy.sh para criar clientes
+✅ Cada cliente terá seu próprio subdomain
+
+📋 Para criar um cliente:
+   ./create-and-deploy.sh -n 'Nome' -i 'id' -d '${domain}' -e 'email@exemplo.com'
+
+🌐 Subdomains serão criados automaticamente como:
+   • cliente1.${domain}
+   • cliente2.${domain}
+   • etc.
+
+🔧 Sistema gerenciado por: create-and-deploy.sh";
+        
+        add_header Content-Type text/plain;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
     
-    # Health check global
+    # Health check do domínio principal
     location /health {
         access_log off;
-        return 200 "OK";
+        return 200 "OK - Domínio principal funcionando";
         add_header Content-Type text/plain;
     }
     
-    # Status do nginx
+    # Status do nginx (apenas localhost)
     location /nginx_status {
         stub_status on;
         access_log off;
         allow 127.0.0.1;
         deny all;
     }
+    
+    # Logs específicos do domínio principal
+    access_log /var/log/nginx/${domain}.access.log;
+    error_log /var/log/nginx/${domain}.error.log;
 }
 
 # Configuração para HTTPS (quando configurado)
@@ -425,7 +401,7 @@ EOF
     # Testar configuração
     if nginx -t; then
         systemctl reload nginx
-        log_color $GREEN "✅ Nginx configurado para subdomínios"
+        log_color $GREEN "✅ Nginx configurado com arquitetura limpa"
     else
         log_color $RED "❌ Erro na configuração do Nginx para subdomínios"
         exit 1
@@ -714,7 +690,7 @@ main() {
     check_repository
     setup_nginx_main_domain "$DOMAIN"
     setup_ssl_main_domain "$DOMAIN" "$EMAIL" "$TEST_MODE"
-    setup_nginx_subdomains "$DOMAIN" # Adicionado para configurar subdomínios
+    setup_nginx_clean "$DOMAIN" # Configuração limpa do Nginx (sem subdomains)
     setup_backup
     setup_monitoring
     show_summary "$DOMAIN" "$EMAIL" "$TEST_MODE"
