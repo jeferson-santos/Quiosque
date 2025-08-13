@@ -168,15 +168,43 @@ setup_directories() {
 clone_repository() {
     log_color $BLUE "📁 Clonando repositório automaticamente..."
     
-    # Verificar se o repositório já existe
-    if [ -d "/opt/quiosque" ] && [ -d "/opt/quiosque/.git" ]; then
-        log_color $YELLOW "⚠️ Repositório já existe em /opt/quiosque"
-        log_color $BLUE "🔄 Atualizando repositório existente..."
+    # Verificar se o diretório /opt/quiosque existe
+    if [ -d "/opt/quiosque" ]; then
+        log_color $YELLOW "⚠️ Diretório /opt/quiosque já existe"
         
-        cd /opt/quiosque
-        git pull origin main
-        
-        log_color $GREEN "✅ Repositório atualizado"
+        # Verificar se é um repositório Git válido
+        if [ -d "/opt/quiosque/.git" ]; then
+            log_color $BLUE "🔄 Atualizando repositório existente..."
+            
+            cd /opt/quiosque
+            git pull origin main
+            
+            log_color $GREEN "✅ Repositório atualizado"
+        else
+            log_color $YELLOW "⚠️ Diretório não é um repositório Git válido"
+            log_color $BLUE "🗑️ Removendo diretório existente..."
+            
+            # Fazer backup se houver arquivos importantes
+            if [ "$(ls -A /opt/quiosque)" ]; then
+                local backup_dir="/opt/quiosque_backup_$(date +%Y%m%d_%H%M%S)"
+                log_color $BLUE "💾 Criando backup em: $backup_dir"
+                mv /opt/quiosque "$backup_dir"
+            else
+                rm -rf /opt/quiosque
+            fi
+            
+            log_color $BLUE "📥 Clonando repositório do GitHub..."
+            cd /opt
+            git clone https://github.com/jeferson-santos/quiosque.git quiosque
+            
+            if [ $? -eq 0 ]; then
+                log_color $GREEN "✅ Repositório clonado com sucesso!"
+            else
+                log_color $RED "❌ Erro ao clonar repositório!"
+                log_color $YELLOW "⚠️ Verifique a conexão com a internet e tente novamente"
+                exit 1
+            fi
+        fi
     else
         # Clonar repositório
         log_color $BLUE "📥 Clonando repositório do GitHub..."
