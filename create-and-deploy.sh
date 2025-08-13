@@ -88,78 +88,84 @@ cleanup_existing_files() {
 
 
 
+# Função para encontrar porta disponível em um range específico
+find_port_in_range() {
+    local start_port="$1"
+    local end_port="$2"
+    local service_name="$3"
+    
+    # Obter portas já em uso pelo Docker
+    local used_ports=$(docker ps --format "{{.Ports}}" 2>/dev/null | grep -oE "[0-9]+->" | cut -d'>' -f1 | sort -u)
+    
+    # Procurar porta disponível no range
+    for port in $(seq $start_port $end_port); do
+        if ! echo "$used_ports" | grep -q "^$port$"; then
+            log_color $GREEN "   ✅ $service_name: porta $port disponível"
+            echo "$port"
+            return 0
+        fi
+    done
+    
+    log_color $RED "   ❌ Nenhuma porta disponível no range $start_port-$end_port para $service_name"
+    return 1
+}
+
 # Função para configurar portas automáticas do Docker
 configure_docker_ports() {
     log_color $BLUE "🔍 Configurando portas automáticas do Docker..."
     
-    # Usar binding automático de portas (Docker escolhe portas disponíveis)
-    log_color $GREEN "✅ Docker irá escolher automaticamente as portas disponíveis"
-    log_color $BLUE "   • Frontend: porta automática (interna: 80)"
-    log_color $BLUE "   • Backend: porta automática (interna: 8000)"
-    log_color $BLUE "   • PostgreSQL: porta automática (interna: 5432)"
-    log_color $BLUE "   • Redis: porta automática (interna: 6379)"
+    log_color $GREEN "✅ Docker irá usar ranges específicos de portas"
+    log_color $BLUE "   • Frontend: range 8000-8999 (interna: 80)"
+    log_color $BLUE "   • Backend: range 7000-7999 (interna: 8000)"
+    log_color $BLUE "   • PostgreSQL: range 6000-6999 (interna: 5432)"
+    log_color $BLUE "   • Redis: range 5000-5999 (interna: 6379)"
     
     log_color $BLUE "✅ Configuração de portas concluída!"
 }
 
-# Função para obter portas escolhidas pelo Docker
+# Função para obter portas já definidas no docker-compose
 get_docker_ports() {
     local client_id="$1"
     
-    log_color $BLUE "🔍 Obtendo portas escolhidas pelo Docker..."
+    log_color $BLUE "🔍 Obtendo portas já definidas no docker-compose..."
     
-    # Aguardar um pouco para os containers iniciarem
-    sleep 5
+    # As portas já foram definidas na criação do docker-compose
+    # Apenas aguardar containers iniciarem para confirmar
+    log_color $BLUE "⏳ Aguardando containers iniciarem para confirmar portas..."
     
-    # Obter porta do frontend
-    local frontend_port=$(docker port "quiosque_frontend_$client_id" 80 2>/dev/null | cut -d: -f2 | cut -d' ' -f1)
-    if [[ -n "$frontend_port" ]]; then
-        log_color $GREEN "   ✅ Frontend: porta $frontend_port"
-    else
-        log_color $YELLOW "   ⚠️ Frontend: porta não disponível ainda"
-        frontend_port="aguardando..."
+    local max_attempts=30
+    local attempt=1
+    
+    while [[ $attempt -le $max_attempts ]]; do
+        log_color $BLUE "   Tentativa $attempt/$max_attempts..."
+        
+        # Verificar se todos os containers estão rodando
+        if docker ps --format "table {{.Names}}" | grep -q "quiosque_frontend_$client_id" && \
+           docker ps --format "table {{.Names}}" | grep -q "quiosque_backend_$client_id" && \
+           docker ps --format "table {{.Names}}" | grep -q "quiosque_postgres_$client_id" && \
+           docker ps --format "table {{.Names}}" | grep -q "quiosque_redis_$client_id"; then
+            
+            # Aguardar mais um pouco para as portas ficarem disponíveis
+            sleep 3
+            break
+        fi
+        
+        sleep 2
+        ((attempt++))
+    done
+    
+    if [[ $attempt -gt $max_attempts ]]; then
+        log_color $RED "❌ Timeout aguardando containers iniciarem!"
+        exit 1
     fi
     
-    # Obter porta do backend
-    local backend_port=$(docker port "quiosque_backend_$client_id" 8000 2>/dev/null | cut -d: -f2 | cut -d' ' -f1)
-    if [[ -n "$backend_port" ]]; then
-        log_color $GREEN "   ✅ Backend: porta $backend_port"
-    else
-        log_color $YELLOW "   ⚠️ Backend: porta não disponível ainda"
-        backend_port="aguardando..."
-    fi
+    log_color $GREEN "🎯 Portas confirmadas:"
+    log_color $GREEN "   Frontend: $FRONTEND_PORT_CHOSEN (range 8000-8999)"
+    log_color $GREEN "   Backend: $BACKEND_PORT_CHOSEN (range 7000-7999)"
+    log_color $GREEN "   PostgreSQL: $POSTGRES_PORT_CHOSEN (range 6000-6999)"
+    log_color $GREEN "   Redis: $REDIS_PORT_CHOSEN (range 5000-5999)"
     
-    # Obter porta do PostgreSQL
-    local postgres_port=$(docker port "quiosque_postgres_$client_id" 5432 2>/dev/null | cut -d: -f2 | cut -d' ' -f1)
-    if [[ -n "$postgres_port" ]]; then
-        log_color $GREEN "   ✅ PostgreSQL: porta $postgres_port"
-    else
-        log_color $YELLOW "   ⚠️ PostgreSQL: porta não disponível ainda"
-        postgres_port="aguardando..."
-    fi
-    
-    # Obter porta do Redis
-    local redis_port=$(docker port "quiosque_redis_$client_id" 6379 2>/dev/null | cut -d: -f2 | cut -d' ' -f1)
-    if [[ -n "$redis_port" ]]; then
-        log_color $GREEN "   ✅ Redis: porta $redis_port"
-    else
-        log_color $YELLOW "   ⚠️ Redis: porta não disponível ainda"
-        redis_port="aguardando..."
-    fi
-    
-    # Salvar portas para uso posterior
-    FRONTEND_PORT_CHOSEN="$frontend_port"
-    BACKEND_PORT_CHOSEN="$backend_port"
-    POSTGRES_PORT_CHOSEN="$postgres_port"
-    REDIS_PORT_CHOSEN="$redis_port"
-    
-    log_color $GREEN "🎯 Portas obtidas do Docker:"
-    log_color $GREEN "   Frontend: $frontend_port"
-    log_color $GREEN "   Backend: $backend_port"
-    log_color $GREEN "   PostgreSQL: $postgres_port"
-    log_color $GREEN "   Redis: $redis_port"
-    
-    log_color $BLUE "✅ Portas obtidas com sucesso!"
+    log_color $BLUE "✅ Portas confirmadas com sucesso!"
 }
 
 # Função para gerar senhas seguras
@@ -240,6 +246,30 @@ create_docker_compose() {
     
     log_color $BLUE "🐳 Criando docker-compose..."
     
+    # Encontrar portas disponíveis nos ranges específicos
+    local frontend_port=$(find_port_in_range 8000 8999 "Frontend")
+    local backend_port=$(find_port_in_range 7000 7999 "Backend")
+    local postgres_port=$(find_port_in_range 6000 6999 "PostgreSQL")
+    local redis_port=$(find_port_in_range 5000 5999 "Redis")
+    
+    # Verificar se todas as portas foram encontradas
+    if [[ -z "$frontend_port" || -z "$backend_port" || -z "$postgres_port" || -z "$redis_port" ]]; then
+        log_color $RED "❌ Erro: Não foi possível encontrar portas disponíveis em todos os ranges!"
+        exit 1
+    fi
+    
+    # Salvar portas para uso posterior
+    FRONTEND_PORT_CHOSEN="$frontend_port"
+    BACKEND_PORT_CHOSEN="$backend_port"
+    POSTGRES_PORT_CHOSEN="$postgres_port"
+    REDIS_PORT_CHOSEN="$redis_port"
+    
+    log_color $GREEN "🎯 Portas selecionadas:"
+    log_color $GREEN "   • Frontend: $frontend_port (range 8000-8999)"
+    log_color $GREEN "   • Backend: $backend_port (range 7000-7999)"
+    log_color $GREEN "   • PostgreSQL: $postgres_port (range 6000-6999)"
+    log_color $GREEN "   • Redis: $redis_port (range 5000-5999)"
+    
     # Criar arquivo docker-compose
     cat > "docker-compose.$client_id.yml" << EOF
 version: '3.8'
@@ -249,9 +279,9 @@ services:
     build: ./frontend
     container_name: quiosque_frontend_$client_id
     ports:
-      - "0:80"  # Docker escolhe porta disponível
+      - "$frontend_port:80"  # Porta específica do range 8000-8999
     environment:
-      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_API_BASE_URL=http://localhost:$backend_port
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -265,7 +295,7 @@ services:
     build: ./backend
     container_name: quiosque_backend_$client_id
     ports:
-      - "0:8000"  # Docker escolhe porta disponível
+      - "$backend_port:8000"  # Porta específica do range 7000-7999
     environment:
       - POSTGRES_SERVER=postgres_$client_id
       - POSTGRES_PORT=5432
@@ -293,7 +323,7 @@ services:
     image: postgres:15
     container_name: quiosque_postgres_$client_id
     ports:
-      - "0:5432"  # Docker escolhe porta disponível
+      - "$postgres_port:5432"  # Porta específica do range 6000-6999
     environment:
       - POSTGRES_DB=quiosque_$client_id
       - POSTGRES_USER=quiosque_$client_id
@@ -309,7 +339,7 @@ services:
     image: redis:7-alpine
     container_name: quiosque_redis_$client_id
     ports:
-      - "0:6379"  # Docker escolhe porta disponível
+      - "$redis_port:6379"  # Porta específica do range 5000-5999
     command: redis-server --requirepass \${REDIS_PASSWORD}
     volumes:
       - redis_data_$client_id:/data
