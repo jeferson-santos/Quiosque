@@ -351,7 +351,7 @@ deploy_client() {
     log_color $GREEN "✅ Deploy concluído com sucesso!"
 }
 
-# Função para configurar proxy reverso no Nginx
+# Função para configurar proxy reverso no Nginx (arquivos separados)
 configure_nginx_proxy() {
     local client_id="$1"
     local domain="$2"
@@ -360,110 +360,124 @@ configure_nginx_proxy() {
     
     log_color $BLUE "🌐 Configurando proxy reverso no Nginx..."
     
-    # Verificar se o arquivo de configuração do Nginx existe
-    local nginx_config="/etc/nginx/sites-available/default"
+    # Verificar se o diretório do Nginx existe
+    local nginx_sites_available="/etc/nginx/sites-available"
+    local nginx_sites_enabled="/etc/nginx/sites-enabled"
     
-    if [[ ! -f "$nginx_config" ]]; then
-        log_color $RED "❌ Arquivo de configuração do Nginx não encontrado!"
+    if [[ ! -d "$nginx_sites_available" ]]; then
+        log_color $RED "❌ Diretório do Nginx não encontrado!"
         log_color $YELLOW "⚠️ Execute primeiro: sudo ./scripts/setup-vps.sh -d $domain -e seu_email@exemplo.com"
         return 1
     fi
     
-    # Criar backup da configuração atual
-    cp "$nginx_config" "${nginx_config}.backup.$(date +%Y%m%d_%H%M%S)"
-    
-    # Adicionar configuração do subdomínio
+    # Criar subdomain
     local subdomain="${client_id}.${domain}"
+    local config_file="$nginx_sites_available/$subdomain"
+    local enabled_link="$nginx_sites_enabled/$subdomain"
     
-    # Verificar se o subdomínio já está configurado
-    if grep -q "if (\$host = \"$subdomain\")" "$nginx_config"; then
+    # Verificar se o subdomain já está configurado
+    if [[ -f "$config_file" ]]; then
         log_color $YELLOW "⚠️ Subdomínio $subdomain já está configurado no Nginx"
         log_color $BLUE "🔄 Atualizando configuração existente..."
         
-        # Remover configuração existente
-        sed -i "/# BEGIN: $subdomain/,/# END: $subdomain/d" "$nginx_config"
+        # Fazer backup da configuração existente
+        cp "$config_file" "${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
     fi
     
-    # Adicionar nova configuração
-    local proxy_config="
-    # BEGIN: $subdomain
-    if (\$host = \"$subdomain\") {
-        location / {
-            proxy_pass http://localhost:$frontend_port;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
-            
-            # Configurações para SPA
-            try_files \$uri \$uri/ /index.html;
-            
-            # Timeouts
-            proxy_connect_timeout 60s;
-            proxy_send_timeout 60s;
-            proxy_read_timeout 60s;
-            
-            # Buffer settings
-            proxy_buffering on;
-            proxy_buffer_size 4k;
-            proxy_buffers 8 4k;
-        }
+    # Criar arquivo de configuração do subdomain
+    log_color $BLUE "📝 Criando arquivo de configuração: $subdomain"
+    
+    cat > "$config_file" << EOF
+# Configuração para subdomain: $subdomain
+# Cliente: $client_id
+# Criado em: $(date)
+
+server {
+    listen 80;
+    server_name $subdomain;
+    
+    # Frontend - Aplicação React
+    location / {
+        proxy_pass http://localhost:$frontend_port;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         
-        # API calls para o backend
-        location /api/ {
-            proxy_pass http://localhost:$backend_port;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
-            
-            # Configurações para API
-            proxy_connect_timeout 60s;
-            proxy_send_timeout 60s;
-            proxy_read_timeout 60s;
-        }
+        # Configurações para SPA
+        try_files \$uri \$uri/ /index.html;
         
-        # Documentação da API
-        location /docs {
-            proxy_pass http://localhost:$backend_port;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
-        }
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
         
-        # Health check específico do cliente
-        location /health {
-            proxy_pass http://localhost:$backend_port;
-            proxy_set_header Host \$host;
-        }
+        # Buffer settings
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
     }
-    # END: $subdomain"
     
-    # Adicionar configuração no final do arquivo (antes do último })
-    # Encontrar a última linha que contém apenas }
-    local last_brace_line=$(grep -n "^}$" "$nginx_config" | tail -1 | cut -d: -f1)
+    # API calls para o backend
+    location /api/ {
+        proxy_pass http://localhost:$backend_port;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # Configurações para API
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
     
-    if [[ -n "$last_brace_line" ]]; then
-        # Inserir antes da última }
-        sed -i "${last_brace_line}i\\$proxy_config" "$nginx_config"
-    else
-        # Se não encontrar, adicionar no final
-        echo "$proxy_config" >> "$nginx_config"
+    # Documentação da API
+    location /docs {
+        proxy_pass http://localhost:$backend_port;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    
+    # Health check específico do cliente
+    location /health {
+        proxy_pass http://localhost:$backend_port;
+        proxy_set_header Host \$host;
+    }
+    
+    # Logs específicos do cliente
+    access_log /var/log/nginx/$subdomain.access.log;
+    error_log /var/log/nginx/$subdomain.error.log;
+}
+EOF
+    
+    # Criar symlink para ativar o site
+    if [[ ! -L "$enabled_link" ]]; then
+        log_color $BLUE "🔗 Ativando subdomain: $subdomain"
+        ln -sf "$config_file" "$enabled_link"
     fi
     
     # Testar configuração do Nginx
+    log_color $BLUE "🧪 Testando configuração do Nginx..."
     if nginx -t; then
         # Recarregar Nginx
+        log_color $BLUE "🔄 Recarregando Nginx..."
         systemctl reload nginx
+        
         log_color $GREEN "✅ Proxy reverso configurado com sucesso!"
         log_color $GREEN "🌐 Subdomínio: $subdomain"
         log_color $GREEN "   • Frontend: http://$subdomain (porta $frontend_port)"
         log_color $GREEN "   • Backend: http://$subdomain/api (porta $backend_port)"
+        log_color $GREEN "📁 Arquivo: $config_file"
+        log_color $GREEN "🔗 Ativado: $enabled_link"
     else
         log_color $RED "❌ Erro na configuração do Nginx"
-        log_color $YELLOW "🔄 Restaurando backup..."
-        cp "${nginx_config}.backup.$(date +%Y%m%d_%H%M%S)" "$nginx_config"
+        if [[ -f "${config_file}.backup.$(date +%Y%m%d_%H%M%S)" ]]; then
+            log_color $YELLOW "🔄 Restaurando backup..."
+            cp "${config_file}.backup.$(date +%Y%m%d_%H%M%S)" "$config_file"
+        fi
         return 1
     fi
 }
@@ -501,6 +515,8 @@ show_summary() {
     log_color $BLUE "📁 ARQUIVOS CRIADOS:"
     log_color $BLUE "   • .env"
     log_color $BLUE "   • docker-compose.$client_id.yml"
+    log_color $BLUE "   • Nginx: /etc/nginx/sites-available/$subdomain"
+    log_color $BLUE "   • Nginx: /etc/nginx/sites-enabled/$subdomain"
     
     echo
     log_color $BLUE "🔒 CREDENCIAIS PADRÃO:"
