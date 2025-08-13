@@ -440,8 +440,17 @@ configure_nginx_proxy() {
     }
     # END: $subdomain"
     
-    # Inserir configuração antes do último }
-    sed -i "s|    # Padrão: redirecionar para página de erro ou domínio principal|$proxy_config\n    # Padrão: redirecionar para página de erro ou domínio principal|" "$nginx_config"
+    # Adicionar configuração no final do arquivo (antes do último })
+    # Encontrar a última linha que contém apenas }
+    local last_brace_line=$(grep -n "^}$" "$nginx_config" | tail -1 | cut -d: -f1)
+    
+    if [[ -n "$last_brace_line" ]]; then
+        # Inserir antes da última }
+        sed -i "${last_brace_line}i\\$proxy_config" "$nginx_config"
+    else
+        # Se não encontrar, adicionar no final
+        echo "$proxy_config" >> "$nginx_config"
+    fi
     
     # Testar configuração do Nginx
     if nginx -t; then
