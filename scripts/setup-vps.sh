@@ -309,13 +309,26 @@ setup_nginx_clean() {
     # IMPORTANTE: NÃO criar configuração SSL aqui - o Certbot já fez isso!
     # Apenas criar uma configuração básica para o domínio principal
     
+    # Verificar se o Certbot já configurou SSL
+    if [[ -f "/etc/nginx/sites-enabled/psicomariaantonia.com.br" ]]; then
+        log_color $YELLOW "⚠️ Certbot já configurou SSL para ${domain}"
+        log_color $BLUE "🔄 Removendo arquivo default conflitante..."
+        
+        # Remover arquivo default se existir
+        rm -f "/etc/nginx/sites-available/default"
+        rm -f "/etc/nginx/sites-enabled/default"
+        
+        log_color $GREEN "✅ Arquivo default removido (Certbot já configurou SSL)"
+        return 0
+    fi
+    
     # Criar configuração principal do nginx APENAS para o domínio principal
     cat > "/etc/nginx/sites-available/default" << EOF
 # ========================================
 # CONFIGURAÇÃO PRINCIPAL DO NGINX - DOMÍNIO PRINCIPAL
 # ========================================
 # Gerado automaticamente pelo setup-vps.sh
-# Data: $(date)
+# Data: $(date '+%Y-%m-%d %H:%M:%S')
 # Domínio: ${domain}
 # ARQUITETURA: Cada subdomain terá seu próprio arquivo
 # SSL: Configurado automaticamente pelo Certbot
