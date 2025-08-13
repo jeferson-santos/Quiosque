@@ -67,92 +67,26 @@ check_and_install_dependencies() {
     echo
 }
 
-# Função para verificar se cliente já existe
-check_client_exists() {
+# Função para limpar arquivos existentes
+cleanup_existing_files() {
     local client_id="$1"
-    local compose_file="docker-compose.$client_id.yml"
-    local env_file=".env"
     
-    log_color $BLUE "🔍 Verificando se cliente já existe..."
+    log_color $BLUE "🧹 Limpando arquivos existentes para cliente '$client_id'..."
     
-    if [[ -f "$compose_file" ]] || [[ -f "$env_file" ]]; then
-        log_color $YELLOW "⚠️ Cliente '$client_id' já existe!"
-        echo
-        log_color $BLUE "📋 Arquivos encontrados:"
-        [[ -f "$compose_file" ]] && log_color $BLUE "   • $compose_file"
-        [[ -f "$env_file" ]] && log_color $BLUE "   • $env_file"
-        echo
-        
-        # Verificar se containers estão rodando
-        if [[ -f "$compose_file" ]]; then
-            log_color $BLUE "🔍 Verificando containers existentes..."
-            if docker compose -f "$compose_file" ps | grep -q "Up"; then
-                log_color $YELLOW "   • Containers estão rodando"
-            else
-                log_color $BLUE "   • Containers não estão rodando"
-            fi
-        fi
-        
-        echo
-        read -p "❓ Deseja recriar o cliente '$client_id'? Isso irá REMOVER TUDO! (S/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Ss]$ ]]; then
-            log_color $YELLOW "🗑️ Recriando cliente '$client_id'..."
-            remove_existing_client "$client_id"
-            return 0
-        else
-            log_color $YELLOW "❌ Operação cancelada pelo usuário"
-            exit 0
-        fi
-    fi
-    
-    log_color $GREEN "✅ Cliente '$client_id' não existe, continuando..."
-    return 1
-}
-
-# Função para remover cliente existente
-remove_existing_client() {
-    local client_id="$1"
-    local compose_file="docker-compose.$client_id.yml"
-    
-    log_color $RED "🗑️ Removendo cliente existente '$client_id'..."
-    
-    # Parar e remover containers
-    if [[ -f "$compose_file" ]]; then
-        log_color $BLUE "🛑 Parando containers..."
-        docker compose -f "$compose_file" down -v 2>/dev/null || true
-        
-        log_color $BLUE "🗑️ Removendo containers..."
-        docker compose -f "$compose_file" rm -f 2>/dev/null || true
-    fi
-    
-    # Remover volumes
-    log_color $BLUE "🗑️ Removendo volumes..."
-    docker volume rm "quiosque_postgres_data_$client_id" 2>/dev/null || true
-    
-    # Remover redes (se não estiverem sendo usadas por outros clientes)
-    log_color $BLUE "🗑️ Verificando redes..."
-    if ! ls docker-compose.*.yml 2>/dev/null | grep -v "$client_id" >/dev/null; then
-        docker network rm "quiosque_quiosque_network_$client_id" 2>/dev/null || true
+    # Parar containers se estiverem rodando
+    if [[ -f "docker-compose.$client_id.yml" ]]; then
+        log_color $BLUE "🛑 Parando containers existentes..."
+        docker compose -f "docker-compose.$client_id.yml" down -v 2>/dev/null || true
     fi
     
     # Remover arquivos
-    log_color $BLUE "🗑️ Removendo arquivos..."
-    rm -f "$compose_file"
+    rm -f "docker-compose.$client_id.yml"
     rm -f ".env"
     
-    # Remover imagens (opcional)
-    read -p "❓ Deseja remover também as imagens Docker? (S/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Ss]$ ]]; then
-        log_color $BLUE "🗑️ Removendo imagens..."
-        docker rmi "quiosque-backend_$client_id" 2>/dev/null || true
-        docker rmi "quiosque-frontend_$client_id" 2>/dev/null || true
-    fi
-    
-    log_color $GREEN "✅ Cliente '$client_id' removido completamente!"
-    echo
+    log_color $GREEN "✅ Limpeza concluída"
 }
+
+
 
 # Função para configurar portas automáticas do Docker
 configure_docker_ports() {
@@ -702,10 +636,8 @@ main() {
     # Verificar e instalar dependências necessárias
     check_and_install_dependencies
     
-    # Verificar se cliente já existe
-    log_color $BLUE "🔍 Chamando check_client_exists..."
-    check_client_exists "$CLIENT_ID"
-    log_color $BLUE "✅ check_client_exists concluído"
+    # Limpar arquivos existentes se houver
+    cleanup_existing_files "$CLIENT_ID"
     
     # Configurar portas automáticas do Docker
     log_color $BLUE "🔍 Chamando configure_docker_ports..."
