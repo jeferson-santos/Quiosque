@@ -103,24 +103,30 @@ cd /home/quiosque
 chmod +x *.sh scripts/*.sh
 ```
 
-### **⚙️ Passo 3: Configurar VPS (Docker + Nginx + SSL)**
+### **⚙️ Passo 3: Configurar VPS para PRODUÇÃO (Docker + Traefik + Portainer + SSL)**
 ```bash
-# Executar setup COMPLETO da VPS
+# Executar setup COMPLETO da VPS para PRODUÇÃO
 sudo ./scripts/setup-vps.sh -d SEU_DOMINIO.com -e SEU_EMAIL@exemplo.com
 
 # Exemplo:
 sudo ./scripts/setup-vps.sh -d psicomariaantonia.com.br -e admin@psicomariaantonia.com.br
+
+# Para teste (staging):
+sudo ./scripts/setup-vps.sh -d SEU_DOMINIO.com -e SEU_EMAIL@exemplo.com -t
 ```
 
-**O que o setup-vps.sh faz:**
+**O que o setup-vps.sh faz (OTIMIZADO PARA PRODUÇÃO):**
 - ✅ **Docker**: Instala e configura
-- ✅ **Nginx**: Configura arquitetura limpa
-- ✅ **SSL**: Certbot para domínio principal
+- ✅ **Traefik**: Proxy reverso moderno com SSL automático
+- ✅ **Portainer**: Interface web para gerenciar containers
+- ✅ **Nginx**: Configurado para domínio principal
+- ✅ **SSL**: Let's Encrypt automático para todos os domínios
 - ✅ **Firewall**: UFW configurado
 - ✅ **Backup**: Sistema automático
 - ✅ **Monitoramento**: Logs e health checks
+- ✅ **Segurança**: Fail2ban e configurações de segurança
 
-### **🌐 Passo 4: Verificar configuração**
+### **🌐 Passo 4: Verificar configuração da VPS para PRODUÇÃO**
 ```bash
 # Testar Nginx
 sudo nginx -t
@@ -129,8 +135,17 @@ sudo nginx -t
 sudo systemctl status nginx
 sudo systemctl status docker
 
+# Verificar containers Traefik e Portainer
+docker ps
+
 # Acessar domínio principal
 curl -I https://SEU_DOMINIO.com
+
+# Acessar Portainer (interface web)
+curl -I https://portainer.SEU_DOMINIO.com
+
+# Acessar Traefik Dashboard
+curl -I https://traefik.SEU_DOMINIO.com
 ```
 
 ### **👥 Passo 5: Criar clientes (subdomains)**
@@ -144,23 +159,29 @@ curl -I https://SEU_DOMINIO.com
 
 **O que o create-and-deploy.sh faz:**
 - ✅ **Docker**: Containers com portas automáticas
-- ✅ **Nginx**: Arquivo individual por subdomain
-- ✅ **SSL**: Certificado para subdomain
+- ✅ **Traefik**: Configuração automática de proxy reverso
+- ✅ **SSL**: Certificado automático via Let's Encrypt
 - ✅ **Banco**: PostgreSQL isolado por cliente
 - ✅ **Cache**: Redis isolado por cliente
+- ✅ **Subdomínios**: Configurados automaticamente no Traefik
 
 ### **🔍 Passo 6: Verificar funcionamento**
 ```bash
 # Listar containers
 docker ps
 
-# Verificar arquivos Nginx
-ls -la /etc/nginx/sites-available/
-ls -la /etc/nginx/sites-enabled/
+# Verificar configurações do Traefik
+docker logs traefik
 
-# Testar subdomains
-curl -I http://restaurante_a.SEU_DOMINIO.com
-curl -I http://restaurante_b.SEU_DOMINIO.com
+# Verificar configurações do Portainer
+docker logs portainer
+
+# Testar subdomains (agora via HTTPS)
+curl -I https://restaurante_a.SEU_DOMINIO.com
+curl -I https://restaurante_b.SEU_DOMINIO.com
+
+# Acessar Portainer via web
+# https://portainer.SEU_DOMINIO.com
 ```
 
 ## 🔧 **Configuração Automática**
@@ -171,8 +192,9 @@ O sistema **não requer configuração manual**:
 2. **Usuário admin**: Criado automaticamente (`admin` / `admin123`)
 3. **Configurações**: Geradas automaticamente para cada cliente
 4. **Networks Docker**: Isolados por cliente
-5. **Nginx**: Arquivos separados por subdomain (arquitetura limpa)
-6. **SSL**: Configurado automaticamente para todos os domínios
+5. **Traefik**: Proxy reverso configurado automaticamente para todos os subdomínios
+6. **SSL**: Let's Encrypt configurado automaticamente para todos os domínios
+7. **Portainer**: Interface web para gerenciar containers automaticamente configurada
 
 ## 📁 **Estrutura do Projeto**
 

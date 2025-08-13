@@ -1,10 +1,9 @@
 #!/bin/bash
 # ========================================
-# SCRIPT PARA CONFIGURAÇÃO COMPLETA DA VPS (ARQUITETURA LIMPA!)
+# SCRIPT PARA CONFIGURAÇÃO COMPLETA DA VPS PARA PRODUÇÃO
 # ========================================
 # Este script configura uma VPS Ubuntu completa para o Sistema de Quiosque
-# Inclui: Docker, Nginx, SSL para domínio principal
-# Subdomains são gerenciados pelo create-and-deploy.sh (arquivos separados)
+# Inclui: Docker, Nginx, SSL para domínio principal, Portainer
 # DEVE ser executado como root
 
 set -e
@@ -25,8 +24,8 @@ log_color() {
 
 # Função para mostrar ajuda
 show_help() {
-    echo "🚀 Script para Configuração COMPLETA da VPS (TUDO EM UM!)"
-    echo "========================================================="
+    echo "🚀 Script para Configuração COMPLETA da VPS para PRODUÇÃO"
+    echo "========================================================"
     echo
     echo "Uso: $0 [OPÇÕES]"
     echo
@@ -41,16 +40,17 @@ show_help() {
     echo "  $0 -d meudominio.com -e 'admin@meudominio.com' -t"
     echo
     echo "PRÉ-REQUISITOS:"
-    echo "  1. Clone o repositório: git clone <seu-repositorio> /opt/quiosque/Quiosque"
-    echo "  2. Execute este script como root: sudo $0 -d DOMAIN -e EMAIL"
+    echo "  1. VPS Ubuntu 20.04+ com acesso root"
+    echo "  2. Domínio configurado com A record apontando para esta VPS"
+    echo "  3. Execute este script como root: sudo $0 -d DOMAIN -e EMAIL"
     echo
-    echo "🎯 ESTE SCRIPT CONFIGURA TUDO:"
+    echo "🎯 ESTE SCRIPT CONFIGURA:"
     echo "   ✅ VPS básica (Docker, Nginx, SSL)"
-    echo "   ✅ Nginx para domínio principal (arquitetura limpa)"
-    echo "   ✅ Subdomains gerenciados pelo create-and-deploy.sh"
-    echo "   ✅ Clone automático do repositório em /opt/quiosque"
-    echo "   ✅ Backup automático (geral + bases de dados) às 2h"
-    echo "   ✅ Monitoramento e logs automáticos"
+    echo "   ✅ Nginx para domínio principal"
+    echo "   ✅ Portainer rodando em HTTPS"
+    echo "   ✅ SSL automático com Let's Encrypt"
+    echo "   ✅ Backup automático e monitoramento"
+    echo "   ✅ Firewall e segurança básica"
     echo
 }
 
@@ -85,7 +85,7 @@ install_tools() {
     log_color $BLUE "🔧 Instalando ferramentas essenciais..."
     
     apt update
-    apt install -y curl wget git ufw fail2ban htop nginx certbot python3-certbot-nginx logrotate
+    apt install -y curl wget git ufw fail2ban htop nginx certbot python3-certbot-nginx logrotate unzip
     
     log_color $GREEN "✅ Ferramentas essenciais instaladas"
 }
@@ -156,6 +156,7 @@ setup_directories() {
     mkdir -p /opt/quiosque/logs
     mkdir -p /opt/quiosque/backups
     mkdir -p /opt/quiosque/ssl
+    mkdir -p /opt/quiosque/portainer
     
     # Definir permissões
     chown -R quiosque:quiosque /opt/quiosque
@@ -164,71 +165,176 @@ setup_directories() {
     log_color $GREEN "✅ Diretórios configurados"
 }
 
-# Função para clonar repositório automaticamente
-clone_repository() {
-    log_color $BLUE "📁 Clonando repositório automaticamente..."
+# Função para configurar Portainer
+setup_portainer() {
+    local domain="$1"
     
-    # Verificar se o diretório /opt/quiosque existe
-    if [ -d "/opt/quiosque" ]; then
-        log_color $YELLOW "⚠️ Diretório /opt/quiosque já existe"
-        
-        # Verificar se é um repositório Git válido
-        if [ -d "/opt/quiosque/.git" ]; then
-            log_color $BLUE "🔄 Atualizando repositório existente..."
-            
-            cd /opt/quiosque
-            git pull origin main
-            
-            log_color $GREEN "✅ Repositório atualizado"
-        else
-            log_color $YELLOW "⚠️ Diretório não é um repositório Git válido"
-            log_color $BLUE "🗑️ Removendo diretório existente..."
-            
-            # Fazer backup se houver arquivos importantes
-            if [ "$(ls -A /opt/quiosque)" ]; then
-                local backup_dir="/opt/quiosque_backup_$(date +%Y%m%d_%H%M%S)"
-                log_color $BLUE "💾 Criando backup em: $backup_dir"
-                mv /opt/quiosque "$backup_dir"
-            else
-                rm -rf /opt/quiosque
-            fi
-            
-            log_color $BLUE "📥 Clonando repositório do GitHub..."
-            cd /opt
-            git clone https://github.com/jeferson-santos/quiosque.git quiosque
-            
-            if [ $? -eq 0 ]; then
-                log_color $GREEN "✅ Repositório clonado com sucesso!"
-            else
-                log_color $RED "❌ Erro ao clonar repositório!"
-                log_color $YELLOW "⚠️ Verifique a conexão com a internet e tente novamente"
-                exit 1
-            fi
-        fi
-    else
-        # Clonar repositório
-        log_color $BLUE "📥 Clonando repositório do GitHub..."
-        
-        cd /opt
-        git clone https://github.com/jeferson-santos/quiosque.git quiosque
-        
-        if [ $? -eq 0 ]; then
-            log_color $GREEN "✅ Repositório clonado com sucesso!"
-        else
-            log_color $RED "❌ Erro ao clonar repositório!"
-            log_color $YELLOW "⚠️ Verifique a conexão com a internet e tente novamente"
-            exit 1
-        fi
-    fi
+    log_color $BLUE "🐳 Configurando Portainer..."
     
-    # Dar permissões de execução aos scripts
-    chmod +x /opt/quiosque/*.sh
-    chmod +x /opt/quiosque/scripts/*.sh
+    # Criar volume para Portainer
+    docker volume create portainer_data
     
-    # Definir permissões de propriedade
-    chown -R quiosque:quiosque /opt/quiosque
+    # Criar rede para Portainer
+    docker network create portainer_network 2>/dev/null || true
     
-    log_color $GREEN "✅ Permissões configuradas"
+    # Criar docker-compose para Portainer
+    cat > "/opt/quiosque/portainer/docker-compose.yml" << EOF
+version: '3.8'
+
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer_data:/data
+    networks:
+      - portainer_network
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(\`portainer.${domain}\`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+volumes:
+  portainer_data:
+
+networks:
+  portainer_network:
+    external: true
+  traefik_network:
+    external: true
+EOF
+
+    # Criar arquivo .env para Portainer
+    cat > "/opt/quiosque/portainer/.env" << EOF
+# Configurações do Portainer
+PORTAINER_DOMAIN=portainer.${domain}
+PORTAINER_PORT=9000
+EOF
+
+    # Definir permissões
+    chown -R quiosque:quiosque /opt/quiosque/portainer
+    chmod +x /opt/quiosque/portainer/docker-compose.yml
+    
+    log_color $GREEN "✅ Portainer configurado"
+}
+
+# Função para configurar Traefik (proxy reverso com SSL automático)
+setup_traefik() {
+    local domain="$1"
+    local email="$2"
+    
+    log_color $BLUE "🌐 Configurando Traefik (proxy reverso com SSL automático)..."
+    
+    # Criar diretório para Traefik
+    mkdir -p /opt/quiosque/traefik
+    mkdir -p /opt/quiosque/traefik/certs
+    mkdir -p /opt/quiosque/traefik/config
+    
+    # Criar configuração do Traefik
+    cat > "/opt/quiosque/traefik/traefik.yml" << EOF
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+entryPoints:
+  web:
+    address: ":8080"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  
+  websecure:
+    address: ":8443"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik_network
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: ${email}
+      storage: /certs/acme.json
+      httpChallenge:
+        entryPoint: web
+
+api:
+  dashboard: true
+  insecure: false
+
+log:
+  level: INFO
+
+accessLog:
+  filePath: "/logs/access.log"
+  format: json
+
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+EOF
+
+    # Criar docker-compose para Traefik
+    cat > "/opt/quiosque/traefik/docker-compose.yml" << EOF
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./certs:/certs
+      - ./logs:/logs
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(\`traefik.${domain}\`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=admin:\$\$2y\$\$10\$\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi"
+
+volumes:
+  traefik_certs:
+
+networks:
+  traefik_network:
+    external: true
+EOF
+
+    # Criar rede Traefik
+    docker network create traefik_network 2>/dev/null || true
+    
+    # Definir permissões
+    chown -R quiosque:quiosque /opt/quiosque/traefik
+    chmod +x /opt/quiosque/traefik/docker-compose.yml
+    
+    log_color $GREEN "✅ Traefik configurado"
 }
 
 # Função para configurar Nginx para domínio principal
@@ -296,6 +402,13 @@ EOF
         </div>
         
         <div class="info">
+            <h3>🔧 Ferramentas Disponíveis</h3>
+            <p>• <strong>Portainer:</strong> <a href="https://portainer.${domain}" target="_blank">https://portainer.${domain}</a></p>
+            <p>• <strong>Traefik Dashboard:</strong> <a href="https://traefik.${domain}" target="_blank">https://traefik.${domain}</a></p>
+            <p>• <strong>Traefik Portas:</strong> 8080 (HTTP) / 8443 (HTTPS)</p>
+        </div>
+        
+        <div class="info">
             <h3>🔧 Próximos Passos</h3>
             <p>1. Use o script create-and-deploy.sh para criar restaurantes</p>
             <p>2. Cada restaurante será configurado automaticamente</p>
@@ -322,83 +435,6 @@ EOF
     if nginx -t; then
         systemctl reload nginx
         log_color $GREEN "✅ Nginx configurado para ${domain}"
-    else
-        log_color $RED "❌ Erro na configuração do Nginx"
-        exit 1
-    fi
-}
-
-# Função para configurar Nginx com arquitetura limpa (sem subdomains)
-setup_nginx_clean() {
-    local domain="$1"
-    
-    log_color $BLUE "🌐 Configurando Nginx com arquitetura limpa..."
-    
-    # IMPORTANTE: NÃO criar configuração SSL aqui - o Certbot já fez isso!
-    # Apenas criar uma configuração básica para o domínio principal
-    
-    # Verificar se o Certbot já configurou SSL
-    if [[ -f "/etc/nginx/sites-enabled/psicomariaantonia.com.br" ]]; then
-        log_color $YELLOW "⚠️ Certbot já configurou SSL para ${domain}"
-        log_color $BLUE "🔄 Removendo arquivo default conflitante..."
-        
-        # Remover arquivo default se existir
-        rm -f "/etc/nginx/sites-available/default"
-        rm -f "/etc/nginx/sites-enabled/default"
-        
-        log_color $GREEN "✅ Arquivo default removido (Certbot já configurou SSL)"
-        return 0
-    fi
-    
-    # Criar configuração principal do nginx APENAS para o domínio principal
-    cat > "/etc/nginx/sites-available/default" << EOF
-# ========================================
-# CONFIGURAÇÃO PRINCIPAL DO NGINX - DOMÍNIO PRINCIPAL
-# ========================================
-# Gerado automaticamente pelo setup-vps.sh
-# Data: $(date '+%Y-%m-%d %H:%M:%S')
-# Domínio: ${domain}
-# ARQUITETURA: Cada subdomain terá seu próprio arquivo
-# SSL: Configurado automaticamente pelo Certbot
-
-# Servidor HTTP - Redirecionar para HTTPS
-server {
-    listen 80;
-    server_name ${domain} www.${domain};
-    
-    # Logs do domínio principal
-    access_log /var/log/nginx/${domain}.access.log;
-    error_log /var/log/nginx/${domain}.error.log;
-    
-    # Redirecionar tudo para HTTPS
-    return 301 https://\$server_name\$request_uri;
-}
-
-# NOTA: O Certbot já criou a configuração SSL para este domínio
-# Não duplicar aqui para evitar conflitos
-
-# ========================================
-# NOTAS IMPORTANTES:
-# ========================================
-# 
-# 1. Este arquivo é gerenciado automaticamente pelo setup-vps.sh
-# 2. Para adicionar novos subdomínios, use o script create-and-deploy.sh
-# 3. O script detecta automaticamente todos os clientes existentes
-# 4. As portas são configuradas automaticamente baseadas nos arquivos .env
-# 5. NÃO edite este arquivo manualmente - suas alterações serão sobrescritas
-# 6. Para personalizar, modifique o script setup-vps.sh
-# 7. SSL é gerenciado pelo Certbot automaticamente
-#
-# ========================================
-EOF
-
-    # Habilitar configuração padrão
-    ln -sf "/etc/nginx/sites-available/default" "/etc/nginx/sites-enabled/"
-    
-    # Testar configuração
-    if nginx -t; then
-        systemctl reload nginx
-        log_color $GREEN "✅ Nginx configurado com arquitetura limpa"
     else
         log_color $RED "❌ Erro na configuração do Nginx"
         exit 1
@@ -454,19 +490,19 @@ BACKUP_NAME="quiosque_backup_$DATE"
 # Criar diretório de backup
 mkdir -p "$BACKUP_DIR/$BACKUP_NAME"
 
-    # Backup dos containers Docker
-    cd /opt/quiosque
-    docker compose -f docker-compose.*.yml ps -q | while read container; do
-        docker commit "$container" "backup_$container:$DATE"
-    done
+# Backup dos containers Docker
+docker ps -q | while read container; do
+    docker commit "$container" "backup_$container:$DATE" 2>/dev/null || true
+done
 
-    # Backup dos volumes Docker
-    docker run --rm -v quiosque_postgres_data:/data -v "$BACKUP_DIR/$BACKUP_NAME":/backup alpine tar czf /backup/postgres_data.tar.gz -C /data . 2>/dev/null || true
-    docker run --rm -v quiosque_redis_data:/data -v "$BACKUP_DIR/$BACKUP_NAME":/backup alpine tar czf /backup/redis_data.tar.gz -C /data . 2>/dev/null || true
+# Backup dos volumes Docker
+docker volume ls -q | while read volume; do
+    docker run --rm -v "$volume:/data" -v "$BACKUP_DIR/$BACKUP_NAME":/backup alpine tar czf "/backup/${volume}_${DATE}.tar.gz" -C /data . 2>/dev/null || true
+done
 
-    # Backup dos arquivos de configuração
-    cp -r /opt/quiosque/.env* "$BACKUP_DIR/$BACKUP_NAME/" 2>/dev/null || true
-    cp -r /opt/quiosque/docker-compose.*.yml "$BACKUP_DIR/$BACKUP_NAME/" 2>/dev/null || true
+# Backup dos arquivos de configuração
+cp -r /opt/quiosque/.env* "$BACKUP_DIR/$BACKUP_NAME/" 2>/dev/null || true
+cp -r /opt/quiosque/*/docker-compose*.yml "$BACKUP_DIR/$BACKUP_NAME/" 2>/dev/null || true
 
 # Backup dos certificados SSL
 cp -r /etc/letsencrypt "$BACKUP_DIR/$BACKUP_NAME/"
@@ -486,79 +522,13 @@ ls -t *.tar.gz | tail -n +8 | xargs -r rm
 echo "Backup concluído: ${BACKUP_NAME}.tar.gz"
 EOF
 
-    # Criar script de backup específico das bases de dados
-    cat > "/opt/quiosque/backup_databases.sh" << 'EOF'
-#!/bin/bash
-# Script de backup das bases de dados dos clientes
-
-BACKUP_DIR="/opt/quiosque/backups/databases"
-DATE=$(date +%Y%m%d_%H%M%S)
-LOG_FILE="/var/log/quiosque_db_backup.log"
-
-# Criar diretório de backup
-mkdir -p "$BACKUP_DIR"
-
-echo "[$DATE] Iniciando backup das bases de dados..." >> "$LOG_FILE"
-
-# Função para fazer backup de uma base específica
-backup_client_database() {
-    local client_id="$1"
-    local container_name="quiosque_postgres_${client_id}"
-    
-    # Verificar se o container existe e está rodando
-    if docker ps --format "table {{.Names}}" | grep -q "^${container_name}$"; then
-        echo "[$DATE] Fazendo backup da base do cliente: $client_id" >> "$LOG_FILE"
-        
-        # Nome do arquivo de backup
-        local backup_file="${BACKUP_DIR}/${client_id}_postgres_${DATE}.sql"
-        
-        # Fazer backup usando pg_dump
-        if docker exec "$container_name" pg_dump -U postgres -d quiosque > "$backup_file" 2>/dev/null; then
-            echo "[$DATE] ✅ Backup do cliente $client_id concluído: $backup_file" >> "$LOG_FILE"
-            
-            # Comprimir backup
-            gzip "$backup_file"
-            echo "[$DATE] ✅ Backup comprimido: ${backup_file}.gz" >> "$LOG_FILE"
-        else
-            echo "[$DATE] ❌ Erro no backup do cliente $client_id" >> "$LOG_FILE"
-        fi
-    else
-        echo "[$DATE] ⚠️ Container do cliente $client_id não está rodando" >> "$LOG_FILE"
-    fi
-}
-
-       # Encontrar todos os clientes ativos
-       cd /opt/quiosque
-       for compose_file in docker-compose.*.yml; do
-    if [[ -f "$compose_file" ]]; then
-        # Extrair client_id do nome do arquivo
-        client_id=$(echo "$compose_file" | sed 's/docker-compose\.\(.*\)\.yml/\1/')
-        
-        if [[ "$client_id" != "*" ]]; then
-            backup_client_database "$client_id"
-        fi
-    fi
-done
-
-# Limpar backups antigos (manter apenas os últimos 30 dias)
-find "$BACKUP_DIR" -name "*.sql.gz" -mtime +30 -delete 2>/dev/null
-
-echo "[$DATE] Backup das bases de dados concluído" >> "$LOG_FILE"
-echo "----------------------------------------" >> "$LOG_FILE"
-EOF
-
     # Tornar executável
     chmod +x /opt/quiosque/backup.sh
-    chmod +x /opt/quiosque/backup_databases.sh
     
     # Configurar cron job para backup geral diário às 2h da manhã
     (crontab -l 2>/dev/null; echo "0 2 * * * /opt/quiosque/backup.sh >> /var/log/quiosque_backup.log 2>&1") | crontab -
     
-    # Configurar cron job para backup das bases de dados diário às 2h da manhã
-    (crontab -l 2>/dev/null; echo "0 2 * * * /opt/quiosque/backup_databases.sh") | crontab -
-    
     log_color $GREEN "✅ Backup automático configurado"
-    log_color $GREEN "✅ Backup das bases de dados configurado (diário às 2h)"
 }
 
 # Função para configurar monitoramento
@@ -576,8 +546,7 @@ DATE=$(date '+%Y-%m-%d %H:%M:%S')
 echo "[$DATE] Iniciando verificação de status..." >> "$LOG_FILE"
 
 # Verificar status dos containers
-cd /opt/quiosque/Quiosque
-docker compose -f docker-compose.*.yml ps >> "$LOG_FILE" 2>&1
+docker ps >> "$LOG_FILE" 2>&1
 
 # Verificar uso de disco
 df -h >> "$LOG_FILE" 2>&1
@@ -618,36 +587,90 @@ EOF
     log_color $GREEN "✅ Monitoramento configurado"
 }
 
+# Função para iniciar serviços
+start_services() {
+    log_color $BLUE "🚀 Iniciando serviços..."
+    
+    # Parar Nginx temporariamente para liberar portas
+    log_color $BLUE "🛑 Parando Nginx temporariamente..."
+    systemctl stop nginx
+    
+    # Iniciar Traefik
+    cd /opt/quiosque/traefik
+    docker compose up -d
+    
+    # Aguardar Traefik iniciar
+    log_color $BLUE "⏳ Aguardando Traefik iniciar..."
+    sleep 15
+    
+    # Verificar se Traefik está rodando
+    if docker ps | grep -q traefik; then
+        log_color $GREEN "✅ Traefik iniciado com sucesso"
+    else
+        log_color $RED "❌ Erro ao iniciar Traefik"
+        return 1
+    fi
+    
+    # Iniciar Portainer
+    cd /opt/quiosque/portainer
+    docker compose up -d
+    
+    # Aguardar Portainer iniciar
+    sleep 10
+    
+    # Verificar se Portainer está rodando
+    if docker ps | grep -q portainer; then
+        log_color $GREEN "✅ Portainer iniciado com sucesso"
+    else
+        log_color $RED "❌ Erro ao iniciar Portainer"
+        return 1
+    fi
+    
+    # Reiniciar Nginx (agora Traefik está rodando nas portas 8080/8443)
+    log_color $BLUE "🔄 Reiniciando Nginx..."
+    systemctl start nginx
+    
+    log_color $GREEN "✅ Serviços iniciados"
+}
+
 # Função para mostrar resumo final
 show_summary() {
     local domain="$1"
     local email="$2"
     local test_mode="$3"
     
-    log_color $GREEN "🎉 CONFIGURAÇÃO COMPLETA DA VPS CONCLUÍDA!"
-    log_color $GREEN "============================================="
+    log_color $GREEN "🎉 CONFIGURAÇÃO COMPLETA DA VPS PARA PRODUÇÃO CONCLUÍDA!"
+    log_color $GREEN "========================================================="
     
     echo
     log_color $BLUE "📋 RESUMO DA CONFIGURAÇÃO:"
-    log_color $BLUE "   ✅ VPS Ubuntu configurada"
+    log_color $BLUE "   ✅ VPS Ubuntu configurada para produção"
     log_color $BLUE "   ✅ Docker e Docker Compose instalados"
-    log_color $BLUE "   ✅ Nginx configurado para domínio principal (arquitetura limpa)"
-    log_color $BLUE "   ✅ Repositório clonado automaticamente em /opt/quiosque/Quiosque"
+    log_color $BLUE "   ✅ Nginx configurado para domínio principal"
+    log_color $BLUE "   ✅ Traefik configurado (proxy reverso com SSL automático)"
+    log_color $BLUE "   ✅ Portainer configurado e rodando"
     log_color $BLUE "   ✅ SSL/HTTPS configurado para domínio principal"
-    log_color $BLUE "   ✅ Backup automático configurado (geral + bases de dados)"
+    log_color $BLUE "   ✅ Backup automático configurado"
     log_color $BLUE "   ✅ Monitoramento configurado"
     
     echo
     log_color $BLUE "🌐 URLs DE ACESSO:"
     log_color $BLUE "   • Domínio principal: https://${domain}"
     log_color $BLUE "   • www: https://www.${domain}"
+    log_color $BLUE "   • Portainer: https://portainer.${domain}"
+    log_color $BLUE "   • Traefik Dashboard: https://traefik.${domain}"
+    
+    echo
+    log_color $BLUE "🔧 PORTAS DOS SERVIÇOS:"
+    log_color $BLUE "   • Nginx: 80/443 (domínio principal)"
+    log_color $BLUE "   • Traefik: 8080/8443 (proxy reverso)"
+    log_color $BLUE "   • Portainer: 9000 (via Traefik)"
     
     echo
     log_color $BLUE "🔧 COMANDOS ÚTEIS:"
     log_color $BLUE "   • Ver status: docker ps"
     log_color $BLUE "   • Ver logs: docker logs <container>"
     log_color $BLUE "   • Backup manual: /opt/quiosque/backup.sh"
-    log_color $BLUE "   • Backup DB manual: /opt/quiosque/backup_databases.sh"
     log_color $BLUE "   • Monitoramento: /opt/quiosque/monitor.sh"
     log_color $BLUE "   • Ver certificados: certbot certificates"
     log_color $BLUE "   • Ver crontab: crontab -l"
@@ -658,21 +681,21 @@ show_summary() {
     log_color $YELLOW "   • Teste o domínio principal via HTTPS"
     log_color $YELLOW "   • Monitore os logs em /var/log/quiosque_*.log"
     log_color $YELLOW "   • Backup geral executado diariamente às 2h"
-    log_color $YELLOW "   • Backup das bases de dados executado diariamente às 2h"
     log_color $YELLOW "   • Monitoramento executado a cada 5 minutos"
-    log_color $YELLOW "   • Repositório clonado em /opt/quiosque/Quiosque"
+    log_color $YELLOW "   • Portainer e Traefik rodando em containers Docker"
     
     echo
     log_color $GREEN "📚 PRÓXIMOS PASSOS:"
-    log_color $GREEN "1. ✅ Repositório já clonado em /opt/quiosque/Quiosque"
+    log_color $GREEN "1. ✅ Ambiente base configurado e pronto"
     log_color $GREEN "2. Use o script create-and-deploy.sh para criar restaurantes"
-    log_color $GREEN "3. Cada restaurante será configurado automaticamente no nginx"
-    log_color $GREEN "4. SSL será configurado para cada subdomínio"
-    log_color $GREEN "5. Backup automático das bases de dados às 2h da manhã"
+    log_color $GREEN "3. Cada restaurante será configurado automaticamente no Traefik"
+    log_color $GREEN "4. SSL será configurado automaticamente para cada subdomínio"
+    log_color $GREEN "5. Gerencie containers via Portainer: https://portainer.${domain}"
     
     echo
-    log_color $GREEN "🎯 VPS PRONTA PARA DEPLOY DE SUBDOMÍNIOS!"
-    log_color $GREEN "🌐 Nginx configurado com arquitetura limpa (arquivos separados)!"
+    log_color $GREEN "🎯 VPS PRONTA PARA PRODUÇÃO!"
+    log_color $GREEN "🌐 Traefik gerenciando SSL automaticamente!"
+    log_color $GREEN "🐳 Portainer rodando em HTTPS!"
 }
 
 # Função principal
@@ -727,25 +750,27 @@ main() {
     fi
     
     # Mostrar resumo da configuração
-    log_color $GREEN "🚀 CONFIGURAÇÃO COMPLETA DA VPS"
-    log_color $GREEN "================================="
+    log_color $GREEN "🚀 CONFIGURAÇÃO COMPLETA DA VPS PARA PRODUÇÃO"
+    log_color $GREEN "============================================="
     echo
     log_color $BLUE "📋 RESUMO DA CONFIGURAÇÃO:"
     log_color $BLUE "   Domínio Principal: $DOMAIN"
     log_color $BLUE "   Email: $EMAIL"
     log_color $BLUE "   Modo Teste: $TEST_MODE"
-    log_color $BLUE "   Nginx: Configurado para domínio principal + subdomínios"
+    log_color $BLUE "   Nginx: Configurado para domínio principal"
+    log_color $BLUE "   Traefik: Proxy reverso com SSL automático"
+    log_color $BLUE "   Portainer: Gerenciamento de containers via web"
     echo
     
     # Confirmar configuração
-    read -p "❓ Confirmar configuração COMPLETA da VPS (incluindo nginx para subdomínios)? (S/N): " -n 1 -r
+    read -p "❓ Confirmar configuração COMPLETA da VPS para PRODUÇÃO? (S/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Ss]$ ]]; then
         log_color $YELLOW "❌ Configuração cancelada pelo usuário"
         exit 0
     fi
     
-    log_color $GREEN "🚀 Iniciando configuração COMPLETA da VPS (tudo em um!)..."
+    log_color $GREEN "🚀 Iniciando configuração COMPLETA da VPS para PRODUÇÃO..."
     
     # Executar etapas
     check_prerequisites
@@ -754,12 +779,13 @@ main() {
     install_docker
     create_app_user
     setup_directories
-    clone_repository
+    setup_traefik "$DOMAIN" "$EMAIL"
+    setup_portainer "$DOMAIN"
     setup_nginx_main_domain "$DOMAIN"
     setup_ssl_main_domain "$DOMAIN" "$EMAIL" "$TEST_MODE"
-    setup_nginx_clean "$DOMAIN" # Configuração limpa do Nginx (sem subdomains)
     setup_backup
     setup_monitoring
+    start_services
     show_summary "$DOMAIN" "$EMAIL" "$TEST_MODE"
 }
 
