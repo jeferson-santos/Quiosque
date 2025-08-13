@@ -207,7 +207,7 @@ create_env_file() {
 # ========================================
 # CONFIGURAÇÃO DO CLIENTE: $client_name
 # ========================================
-# Gerado automaticamente em: $(date)
+    # Gerado automaticamente em: $(date '+%Y-%m-%d %H:%M:%S')
 # Cliente ID: $client_id
 
 # Configurações do Cliente
@@ -426,7 +426,8 @@ configure_nginx_proxy() {
         log_color $BLUE "🔄 Atualizando configuração existente..."
         
         # Fazer backup da configuração existente
-        cp "$config_file" "${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+        local backup_timestamp=$(date +%Y%m%d_%H%M%S)
+        cp "$config_file" "${config_file}.backup.${backup_timestamp}"
     fi
     
     # Criar arquivo de configuração do subdomain
@@ -435,7 +436,7 @@ configure_nginx_proxy() {
     cat > "$config_file" << EOF
 # Configuração para subdomain: $subdomain
 # Cliente: $client_id
-# Criado em: $(date)
+    # Criado em: $(date '+%Y-%m-%d %H:%M:%S')
 
 server {
     listen 80;
@@ -519,9 +520,10 @@ EOF
         log_color $GREEN "🔗 Ativado: $enabled_link"
     else
         log_color $RED "❌ Erro na configuração do Nginx"
-        if [[ -f "${config_file}.backup.$(date +%Y%m%d_%H%M%S)" ]]; then
+        local backup_timestamp=$(date +%Y%m%d_%H%M%S)
+        if [[ -f "${config_file}.backup.${backup_timestamp}" ]]; then
             log_color $YELLOW "🔄 Restaurando backup..."
-            cp "${config_file}.backup.$(date +%Y%m%d_%H%M%S)" "$config_file"
+            cp "${config_file}.backup.${backup_timestamp}" "$config_file"
         fi
         return 1
     fi
