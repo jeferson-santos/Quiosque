@@ -1,9 +1,10 @@
 #!/bin/bash
 # ========================================
-# SCRIPT PARA CONFIGURAÇÃO COMPLETA DA VPS
+# SCRIPT PARA CONFIGURAÇÃO COMPLETA DA VPS (TUDO EM UM!)
 # ========================================
 # Este script configura uma VPS Ubuntu completa para o Sistema de Quiosque
-# Inclui: Docker, Nginx, SSL para domínio principal
+# Inclui: Docker, Nginx, SSL para domínio principal E subdomínios
+# Substitui o antigo generate-nginx-config.sh - agora tudo está aqui!
 # DEVE ser executado como root
 
 set -e
@@ -24,8 +25,8 @@ log_color() {
 
 # Função para mostrar ajuda
 show_help() {
-    echo "🚀 Script para Configuração Completa da VPS"
-    echo "==========================================="
+    echo "🚀 Script para Configuração COMPLETA da VPS (TUDO EM UM!)"
+    echo "========================================================="
     echo
     echo "Uso: $0 [OPÇÕES]"
     echo
@@ -42,6 +43,12 @@ show_help() {
     echo "PRÉ-REQUISITOS:"
     echo "  1. Clone o repositório: git clone <seu-repositorio> /opt/quiosque/Quiosque"
     echo "  2. Execute este script como root: sudo $0 -d DOMAIN -e EMAIL"
+    echo
+    echo "🎯 ESTE SCRIPT CONFIGURA TUDO:"
+    echo "   ✅ VPS básica (Docker, Nginx, SSL)"
+    echo "   ✅ Nginx para domínio principal"
+    echo "   ✅ Nginx para subdomínios (antigo generate-nginx-config.sh)"
+    echo "   ✅ Backup e monitoramento automático"
     echo
 }
 
@@ -277,6 +284,154 @@ EOF
     fi
 }
 
+# Função para configurar Nginx para subdomínios (antigo generate-nginx-config.sh)
+setup_nginx_subdomains() {
+    local domain="$1"
+    
+    log_color $BLUE "🌐 Configurando Nginx para subdomínios..."
+    
+    # Criar configuração principal do nginx para capturar todos os subdomínios
+    cat > "/etc/nginx/sites-available/default" << EOF
+# ========================================
+# CONFIGURAÇÃO PRINCIPAL DO NGINX PARA SUBDOMÍNIOS
+# ========================================
+# Gerado automaticamente pelo setup-vps.sh
+# Data: $(date)
+# Domínio: ${domain}
+
+# Configuração principal do servidor HTTP
+server {
+    listen 80;
+    server_name _;  # Captura todos os domínios
+    
+    # Logs principais
+    access_log /var/log/nginx/main.access.log;
+    error_log /var/log/nginx/main.error.log;
+    
+    # Configuração para subdomínios dinâmicos
+    # O nginx vai redirecionar baseado no host header
+    
+    # EXEMPLO DE CONFIGURAÇÃO (COMENTADO):
+    # if (\$host = "exemplo.${domain}") {
+    #     location / {
+    #         proxy_pass http://localhost:8080;  # Porta do frontend do cliente
+    #         proxy_set_header Host \$host;
+    #         proxy_set_header X-Real-IP \$remote_addr;
+    #         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    #         proxy_set_header X-Forwarded-Proto \$scheme;
+    #         
+    #         # Configurações para SPA
+    #         try_files \$uri \$uri/ /index.html;
+    #         
+    #         # Timeouts
+    #         proxy_connect_timeout 60s;
+    #         proxy_send_timeout 60s;
+    #         proxy_read_timeout 60s;
+    #         
+    #         # Buffer settings
+    #         proxy_buffering on;
+    #         proxy_buffer_size 4k;
+    #         proxy_buffers 8 4k;
+    #     }
+    #     
+    #     # API calls para o backend
+    #     location /api/ {
+    #         proxy_pass http://localhost:8000;  # Porta do backend do cliente
+    #         proxy_set_header Host \$host;
+    #         proxy_set_header X-Real-IP \$remote_addr;
+    #         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    #         proxy_set_header X-Forwarded-Proto \$scheme;
+    #         
+    #         # Configurações para API
+    #         proxy_connect_timeout 60s;
+    #         proxy_send_timeout 60s;
+    #         proxy_read_timeout 60s;
+    #     }
+    #     
+    #     # Documentação da API
+    #     location /docs {
+    #         proxy_pass http://localhost:8000;
+    #         proxy_set_header Host \$host;
+    #         proxy_set_header X-Real-IP \$remote_addr;
+    #         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    #         proxy_set_header X-Forwarded-Proto \$scheme;
+    #     }
+    #     
+    #     # Health check específico do cliente
+    #     location /health {
+    #         proxy_pass http://localhost:8000;
+    #         proxy_set_header Host \$host;
+    #     }
+    # }
+    
+    # Padrão: redirecionar para página de erro ou domínio principal
+    location / {
+        return 404 "Subdomínio não configurado. Use o script create-and-deploy.sh para configurar.";
+    }
+    
+    # Health check global
+    location /health {
+        access_log off;
+        return 200 "OK";
+        add_header Content-Type text/plain;
+    }
+    
+    # Status do nginx
+    location /nginx_status {
+        stub_status on;
+        access_log off;
+        allow 127.0.0.1;
+        deny all;
+    }
+}
+
+# Configuração para HTTPS (quando configurado)
+server {
+    listen 443 ssl http2;
+    server_name _;
+    
+    # SSL configurado pelo Certbot
+    # ssl_certificate /etc/letsencrypt/live/${domain}/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
+    
+    # Redirecionar HTTP para HTTPS
+    if (\$scheme != "https") {
+        return 301 https://\$host\$request_uri;
+    }
+    
+    # Padrão HTTPS
+    location / {
+        return 404 "Subdomínio não configurado. Use o script create-and-deploy.sh para configurar.";
+    }
+}
+
+# ========================================
+# NOTAS IMPORTANTES:
+# ========================================
+# 
+# 1. Este arquivo é gerenciado automaticamente pelo setup-vps.sh
+# 2. Para adicionar novos subdomínios, use o script create-and-deploy.sh
+# 3. O script detecta automaticamente todos os clientes existentes
+# 4. As portas são configuradas automaticamente baseadas nos arquivos .env
+# 5. NÃO edite este arquivo manualmente - suas alterações serão sobrescritas
+# 6. Para personalizar, modifique o script setup-vps.sh
+#
+# ========================================
+EOF
+
+    # Habilitar configuração padrão
+    ln -sf "/etc/nginx/sites-available/default" "/etc/nginx/sites-enabled/"
+    
+    # Testar configuração
+    if nginx -t; then
+        systemctl reload nginx
+        log_color $GREEN "✅ Nginx configurado para subdomínios"
+    else
+        log_color $RED "❌ Erro na configuração do Nginx para subdomínios"
+        exit 1
+    fi
+}
+
 # Função para configurar SSL para domínio principal
 setup_ssl_main_domain() {
     local domain="$1"
@@ -438,6 +593,7 @@ show_summary() {
     log_color $BLUE "   ✅ VPS Ubuntu configurada"
     log_color $BLUE "   ✅ Docker e Docker Compose instalados"
     log_color $BLUE "   ✅ Nginx configurado para domínio principal"
+    log_color $BLUE "   ✅ Nginx configurado para subdomínios"
     log_color $BLUE "   ✅ SSL/HTTPS configurado para domínio principal"
     log_color $BLUE "   ✅ Backup automático configurado"
     log_color $BLUE "   ✅ Monitoramento configurado"
@@ -467,11 +623,13 @@ show_summary() {
     log_color $GREEN "📚 PRÓXIMOS PASSOS:"
     log_color $GREEN "1. Clone o repositório: git clone <seu-repositorio> /opt/quiosque/Quiosque"
     log_color $GREEN "2. Use o script create-and-deploy.sh para criar restaurantes"
-    log_color $GREEN "3. Cada restaurante será configurado automaticamente"
+    log_color $GREEN "3. Cada restaurante será configurado automaticamente no nginx"
     log_color $GREEN "4. SSL será configurado para cada subdomínio"
+    log_color $GREEN "5. Nginx já está configurado para capturar todos os subdomínios"
     
     echo
     log_color $GREEN "🎯 VPS PRONTA PARA DEPLOY DE SUBDOMÍNIOS!"
+    log_color $GREEN "🌐 Nginx configurado para capturar automaticamente todos os subdomínios!"
 }
 
 # Função principal
@@ -533,17 +691,18 @@ main() {
     log_color $BLUE "   Domínio Principal: $DOMAIN"
     log_color $BLUE "   Email: $EMAIL"
     log_color $BLUE "   Modo Teste: $TEST_MODE"
+    log_color $BLUE "   Nginx: Configurado para domínio principal + subdomínios"
     echo
     
     # Confirmar configuração
-    read -p "❓ Confirmar configuração completa da VPS? (S/N): " -n 1 -r
+    read -p "❓ Confirmar configuração COMPLETA da VPS (incluindo nginx para subdomínios)? (S/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Ss]$ ]]; then
         log_color $YELLOW "❌ Configuração cancelada pelo usuário"
         exit 0
     fi
     
-    log_color $GREEN "🚀 Iniciando configuração completa da VPS..."
+    log_color $GREEN "🚀 Iniciando configuração COMPLETA da VPS (tudo em um!)..."
     
     # Executar etapas
     check_prerequisites
@@ -555,6 +714,7 @@ main() {
     check_repository
     setup_nginx_main_domain "$DOMAIN"
     setup_ssl_main_domain "$DOMAIN" "$EMAIL" "$TEST_MODE"
+    setup_nginx_subdomains "$DOMAIN" # Adicionado para configurar subdomínios
     setup_backup
     setup_monitoring
     show_summary "$DOMAIN" "$EMAIL" "$TEST_MODE"

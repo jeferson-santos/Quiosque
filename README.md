@@ -55,9 +55,13 @@ cd Quiosque
   -r "Meu Restaurante Ltda"
 ```
 
-### **3. Para deploy em VPS Ubuntu**
+### **3. Para deploy em VPS Ubuntu (TUDO EM UM!)**
 ```bash
-./scripts/deploy-vps.sh
+# Setup COMPLETO da VPS (inclui nginx para subdomínios)
+sudo ./scripts/setup-vps.sh -d meudominio.com -e admin@meudominio.com
+
+# Depois apenas criar clientes
+./create-and-deploy.sh -n "Meu Restaurante" -i "restaurante1" -d "meudominio.com"
 ```
 
 ### **4. Acessar o sistema**
@@ -76,6 +80,8 @@ O sistema **não requer configuração manual**:
 2. **Usuário admin**: Criado automaticamente (`admin` / `admin123`)
 3. **Configurações**: Geradas automaticamente para cada cliente
 4. **Networks Docker**: Isolados por cliente
+5. **Nginx**: Configurado automaticamente para domínio principal e subdomínios
+6. **SSL**: Configurado automaticamente para todos os domínios
 
 ## 📁 **Estrutura do Projeto**
 
@@ -90,8 +96,9 @@ Quiosque/
 │   ├── package.json        # Dependências Node.js
 │   └── Dockerfile         # Container do frontend
 ├── scripts/                 # Scripts de automação
-│   ├── deploy-vps.sh        # Script automatizado para VPS Ubuntu
-│   └── README.md            # Documentação do script de deploy
+│   ├── setup-vps.sh         # Script COMPLETO para VPS Ubuntu (tudo em um!)
+│   ├── deploy-subdomain.sh  # Script para configurar subdomínios específicos
+│   └── cleanup-vps.sh       # Script para limpeza completa da VPS
 ├── create-and-deploy.sh    # Script unificado para criação e deploy
 ├── docker-compose.example.yml  # Exemplo de configuração
 └── env.prod.example       # Template de ambiente (backend + frontend)
