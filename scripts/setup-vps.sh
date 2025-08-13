@@ -48,7 +48,9 @@ show_help() {
     echo "   ✅ VPS básica (Docker, Nginx, SSL)"
     echo "   ✅ Nginx para domínio principal (arquitetura limpa)"
     echo "   ✅ Subdomains gerenciados pelo create-and-deploy.sh"
-    echo "   ✅ Backup e monitoramento automático"
+    echo "   ✅ Clone automático do repositório em /opt/quiosque"
+    echo "   ✅ Backup automático (geral + bases de dados) às 2h"
+    echo "   ✅ Monitoramento e logs automáticos"
     echo
 }
 
@@ -162,29 +164,43 @@ setup_directories() {
     log_color $GREEN "✅ Diretórios configurados"
 }
 
-# Função para verificar repositório
-check_repository() {
-    log_color $BLUE "📁 Verificando repositório..."
+# Função para clonar repositório automaticamente
+clone_repository() {
+    log_color $BLUE "📁 Clonando repositório automaticamente..."
     
     # Verificar se o repositório já existe
-    if [ ! -d "/opt/quiosque/Quiosque" ]; then
-        log_color $YELLOW "⚠️ Repositório não encontrado em /opt/quiosque/Quiosque"
-        log_color $YELLOW "⚠️ Execute manualmente: git clone <seu-repositorio> /opt/quiosque/Quiosque"
-        log_color $YELLOW "⚠️ Depois execute este script novamente"
-        exit 1
+    if [ -d "/opt/quiosque/Quiosque" ]; then
+        log_color $YELLOW "⚠️ Repositório já existe em /opt/quiosque/Quiosque"
+        log_color $BLUE "🔄 Atualizando repositório existente..."
+        
+        cd /opt/quiosque/Quiosque
+        git pull origin main
+        
+        log_color $GREEN "✅ Repositório atualizado"
+    else
+        # Clonar repositório
+        log_color $BLUE "📥 Clonando repositório do GitHub..."
+        
+        cd /opt/quiosque
+        git clone https://github.com/jeferson-santos/quiosque.git Quiosque
+        
+        if [ $? -eq 0 ]; then
+            log_color $GREEN "✅ Repositório clonado com sucesso!"
+        else
+            log_color $RED "❌ Erro ao clonar repositório!"
+            log_color $YELLOW "⚠️ Verifique a conexão com a internet e tente novamente"
+            exit 1
+        fi
     fi
     
-    # Verificar se é um repositório git válido
-    if [ ! -d "/opt/quiosque/Quiosque/.git" ]; then
-        log_color $RED "❌ Diretório /opt/quiosque/Quiosque não é um repositório git válido!"
-        log_color $RED "❌ Clone o repositório manualmente antes de executar este script"
-        exit 1
-    fi
+    # Dar permissões de execução aos scripts
+    chmod +x /opt/quiosque/Quiosque/*.sh
+    chmod +x /opt/quiosque/Quiosque/scripts/*.sh
     
-    # Definir permissões
+    # Definir permissões de propriedade
     chown -R quiosque:quiosque /opt/quiosque/Quiosque
     
-    log_color $GREEN "✅ Repositório verificado e permissões configuradas"
+    log_color $GREEN "✅ Permissões configuradas"
 }
 
 # Função para configurar Nginx para domínio principal
@@ -489,13 +505,79 @@ ls -t *.tar.gz | tail -n +8 | xargs -r rm
 echo "Backup concluído: ${BACKUP_NAME}.tar.gz"
 EOF
 
+    # Criar script de backup específico das bases de dados
+    cat > "/opt/quiosque/backup_databases.sh" << 'EOF'
+#!/bin/bash
+# Script de backup das bases de dados dos clientes
+
+BACKUP_DIR="/opt/quiosque/backups/databases"
+DATE=$(date +%Y%m%d_%H%M%S)
+LOG_FILE="/var/log/quiosque_db_backup.log"
+
+# Criar diretório de backup
+mkdir -p "$BACKUP_DIR"
+
+echo "[$DATE] Iniciando backup das bases de dados..." >> "$LOG_FILE"
+
+# Função para fazer backup de uma base específica
+backup_client_database() {
+    local client_id="$1"
+    local container_name="quiosque_postgres_${client_id}"
+    
+    # Verificar se o container existe e está rodando
+    if docker ps --format "table {{.Names}}" | grep -q "^${container_name}$"; then
+        echo "[$DATE] Fazendo backup da base do cliente: $client_id" >> "$LOG_FILE"
+        
+        # Nome do arquivo de backup
+        local backup_file="${BACKUP_DIR}/${client_id}_postgres_${DATE}.sql"
+        
+        # Fazer backup usando pg_dump
+        if docker exec "$container_name" pg_dump -U postgres -d quiosque > "$backup_file" 2>/dev/null; then
+            echo "[$DATE] ✅ Backup do cliente $client_id concluído: $backup_file" >> "$LOG_FILE"
+            
+            # Comprimir backup
+            gzip "$backup_file"
+            echo "[$DATE] ✅ Backup comprimido: ${backup_file}.gz" >> "$LOG_FILE"
+        else
+            echo "[$DATE] ❌ Erro no backup do cliente $client_id" >> "$LOG_FILE"
+        fi
+    else
+        echo "[$DATE] ⚠️ Container do cliente $client_id não está rodando" >> "$LOG_FILE"
+    fi
+}
+
+# Encontrar todos os clientes ativos
+cd /opt/quiosque/Quiosque
+for compose_file in docker-compose.*.yml; do
+    if [[ -f "$compose_file" ]]; then
+        # Extrair client_id do nome do arquivo
+        client_id=$(echo "$compose_file" | sed 's/docker-compose\.\(.*\)\.yml/\1/')
+        
+        if [[ "$client_id" != "*" ]]; then
+            backup_client_database "$client_id"
+        fi
+    fi
+done
+
+# Limpar backups antigos (manter apenas os últimos 30 dias)
+find "$BACKUP_DIR" -name "*.sql.gz" -mtime +30 -delete 2>/dev/null
+
+echo "[$DATE] Backup das bases de dados concluído" >> "$LOG_FILE"
+echo "----------------------------------------" >> "$LOG_FILE"
+EOF
+
     # Tornar executável
     chmod +x /opt/quiosque/backup.sh
+    chmod +x /opt/quiosque/backup_databases.sh
     
-    # Configurar cron job para backup diário às 2h da manhã
+    # Configurar cron job para backup geral diário às 2h da manhã
     (crontab -l 2>/dev/null; echo "0 2 * * * /opt/quiosque/backup.sh >> /var/log/quiosque_backup.log 2>&1") | crontab -
     
+    # Configurar cron job para backup das bases de dados diário às 2h da manhã
+    (crontab -l 2>/dev/null; echo "0 2 * * * /opt/quiosque/backup_databases.sh") | crontab -
+    
     log_color $GREEN "✅ Backup automático configurado"
+    log_color $GREEN "✅ Backup das bases de dados configurado (diário às 2h)"
 }
 
 # Função para configurar monitoramento
@@ -568,10 +650,10 @@ show_summary() {
     log_color $BLUE "📋 RESUMO DA CONFIGURAÇÃO:"
     log_color $BLUE "   ✅ VPS Ubuntu configurada"
     log_color $BLUE "   ✅ Docker e Docker Compose instalados"
-    log_color $BLUE "   ✅ Nginx configurado para domínio principal"
-    log_color $BLUE "   ✅ Nginx configurado para subdomínios"
+    log_color $BLUE "   ✅ Nginx configurado para domínio principal (arquitetura limpa)"
+    log_color $BLUE "   ✅ Repositório clonado automaticamente em /opt/quiosque/Quiosque"
     log_color $BLUE "   ✅ SSL/HTTPS configurado para domínio principal"
-    log_color $BLUE "   ✅ Backup automático configurado"
+    log_color $BLUE "   ✅ Backup automático configurado (geral + bases de dados)"
     log_color $BLUE "   ✅ Monitoramento configurado"
     
     echo
@@ -584,28 +666,32 @@ show_summary() {
     log_color $BLUE "   • Ver status: docker ps"
     log_color $BLUE "   • Ver logs: docker logs <container>"
     log_color $BLUE "   • Backup manual: /opt/quiosque/backup.sh"
+    log_color $BLUE "   • Backup DB manual: /opt/quiosque/backup_databases.sh"
     log_color $BLUE "   • Monitoramento: /opt/quiosque/monitor.sh"
     log_color $BLUE "   • Ver certificados: certbot certificates"
+    log_color $BLUE "   • Ver crontab: crontab -l"
     
     echo
     log_color $YELLOW "⚠️ IMPORTANTE:"
     log_color $YELLOW "   • Configure os registros DNS para apontar para esta VPS"
     log_color $YELLOW "   • Teste o domínio principal via HTTPS"
     log_color $YELLOW "   • Monitore os logs em /var/log/quiosque_*.log"
-    log_color $YELLOW "   • Backup automático executado diariamente às 2h"
+    log_color $YELLOW "   • Backup geral executado diariamente às 2h"
+    log_color $YELLOW "   • Backup das bases de dados executado diariamente às 2h"
     log_color $YELLOW "   • Monitoramento executado a cada 5 minutos"
+    log_color $YELLOW "   • Repositório clonado em /opt/quiosque/Quiosque"
     
     echo
     log_color $GREEN "📚 PRÓXIMOS PASSOS:"
-    log_color $GREEN "1. Clone o repositório: git clone <seu-repositorio> /opt/quiosque/Quiosque"
+    log_color $GREEN "1. ✅ Repositório já clonado em /opt/quiosque/Quiosque"
     log_color $GREEN "2. Use o script create-and-deploy.sh para criar restaurantes"
     log_color $GREEN "3. Cada restaurante será configurado automaticamente no nginx"
     log_color $GREEN "4. SSL será configurado para cada subdomínio"
-    log_color $GREEN "5. Nginx já está configurado para capturar todos os subdomínios"
+    log_color $GREEN "5. Backup automático das bases de dados às 2h da manhã"
     
     echo
     log_color $GREEN "🎯 VPS PRONTA PARA DEPLOY DE SUBDOMÍNIOS!"
-    log_color $GREEN "🌐 Nginx configurado para capturar automaticamente todos os subdomínios!"
+    log_color $GREEN "🌐 Nginx configurado com arquitetura limpa (arquivos separados)!"
 }
 
 # Função principal
@@ -687,7 +773,7 @@ main() {
     install_docker
     create_app_user
     setup_directories
-    check_repository
+    clone_repository
     setup_nginx_main_domain "$DOMAIN"
     setup_ssl_main_domain "$DOMAIN" "$EMAIL" "$TEST_MODE"
     setup_nginx_clean "$DOMAIN" # Configuração limpa do Nginx (sem subdomains)
