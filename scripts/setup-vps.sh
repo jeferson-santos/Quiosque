@@ -403,8 +403,8 @@ EOF
         
         <div class="info">
             <h3>🔧 Ferramentas Disponíveis</h3>
-            <p>• <strong>Portainer:</strong> <a href="https://portainer.${domain}" target="_blank">https://portainer.${domain}</a></p>
-            <p>• <strong>Traefik Dashboard:</strong> <a href="https://traefik.${domain}" target="_blank">https://traefik.${domain}</a></p>
+            <p>• <strong>Portainer:</strong> <a href="http://portainer.${domain}" target="_blank">http://portainer.${domain}</a></p>
+            <p>• <strong>Traefik Dashboard:</strong> <a href="http://traefik.${domain}" target="_blank">http://traefik.${domain}</a></p>
             <p>• <strong>Traefik Portas:</strong> 8081 (HTTP) / 8444 (HTTPS)</p>
         </div>
         
@@ -655,14 +655,14 @@ show_summary() {
     
     echo
     log_color $BLUE "🌐 URLs DE ACESSO:"
-    log_color $BLUE "   • Domínio principal: https://${domain}"
-    log_color $BLUE "   • www: https://www.${domain}"
-    log_color $BLUE "   • Portainer: https://portainer.${domain}"
-    log_color $BLUE "   • Traefik Dashboard: https://traefik.${domain}"
+    log_color $BLUE "   • Domínio principal: http://${domain}"
+    log_color $BLUE "   • www: http://www.${domain}"
+    log_color $BLUE "   • Portainer: http://portainer.${domain}"
+    log_color $BLUE "   • Traefik Dashboard: http://traefik.${domain}"
     
     echo
     log_color $BLUE "🔧 PORTAS DOS SERVIÇOS:"
-    log_color $BLUE "   • Nginx: 80/443 (domínio principal)"
+    log_color $BLUE "   • Nginx: 80 (domínio principal)"
     log_color $BLUE "   • Traefik: 8081/8444 (proxy reverso)"
     log_color $BLUE "   • Portainer: 9000 (via Traefik)"
     
@@ -689,8 +689,8 @@ show_summary() {
     log_color $GREEN "1. ✅ Ambiente base configurado e pronto"
     log_color $GREEN "2. Use o script create-and-deploy.sh para criar restaurantes"
     log_color $GREEN "3. Cada restaurante será configurado automaticamente no Traefik"
-    log_color $GREEN "4. SSL será configurado automaticamente para cada subdomínio"
-    log_color $GREEN "5. Gerencie containers via Portainer: https://portainer.${domain}"
+    log_color $GREEN "4. Gerencie containers via Portainer: http://portainer.${domain}"
+    log_color $GREEN "5. Para SSL, execute: sudo ./scripts/setup-ssl.sh -d ${domain} -e ${email}"
     
     echo
     log_color $GREEN "🎯 VPS PRONTA PARA PRODUÇÃO!"
@@ -758,7 +758,7 @@ main() {
     log_color $BLUE "   Email: $EMAIL"
     log_color $BLUE "   Modo Teste: $TEST_MODE"
     log_color $BLUE "   Nginx: Configurado para domínio principal"
-    log_color $BLUE "   Traefik: Proxy reverso com SSL automático"
+    log_color $BLUE "   Traefik: Proxy reverso (HTTP por enquanto)"
     log_color $BLUE "   Portainer: Gerenciamento de containers via web"
     echo
     
@@ -782,7 +782,6 @@ main() {
     setup_traefik "$DOMAIN" "$EMAIL"
     setup_portainer "$DOMAIN"
     setup_nginx_main_domain "$DOMAIN"
-    setup_ssl_main_domain "$DOMAIN" "$EMAIL" "$TEST_MODE"
     setup_backup
     setup_monitoring
     start_services

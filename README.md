@@ -103,9 +103,9 @@ cd /home/quiosque
 chmod +x *.sh scripts/*.sh
 ```
 
-### **⚙️ Passo 3: Configurar VPS para PRODUÇÃO (Docker + Traefik + Portainer + SSL)**
+### **⚙️ Passo 3: Configurar VPS para PRODUÇÃO (Docker + Traefik + Portainer)**
 ```bash
-# Executar setup COMPLETO da VPS para PRODUÇÃO
+# Executar setup COMPLETO da VPS para PRODUÇÃO (HTTP por enquanto)
 sudo ./scripts/setup-vps.sh -d SEU_DOMINIO.com -e SEU_EMAIL@exemplo.com
 
 # Exemplo:
@@ -115,16 +115,29 @@ sudo ./scripts/setup-vps.sh -d psicomariaantonia.com.br -e admin@psicomariaanton
 sudo ./scripts/setup-vps.sh -d SEU_DOMINIO.com -e SEU_EMAIL@exemplo.com -t
 ```
 
+### **🔒 Passo 3.1: Configurar SSL (OPCIONAL - após setup-vps.sh)**
+```bash
+# Configurar SSL para domínio principal e subdomínios
+sudo ./scripts/setup-ssl.sh -d SEU_DOMINIO.com -e SEU_EMAIL@exemplo.com
+
+# Para teste (staging):
+sudo ./scripts/setup-ssl.sh -d SEU_DOMINIO.com -e SEU_EMAIL@exemplo.com -t
+```
+
 **O que o setup-vps.sh faz (OTIMIZADO PARA PRODUÇÃO):**
 - ✅ **Docker**: Instala e configura
-- ✅ **Traefik**: Proxy reverso moderno com SSL automático
+- ✅ **Traefik**: Proxy reverso moderno (HTTP por enquanto)
 - ✅ **Portainer**: Interface web para gerenciar containers
 - ✅ **Nginx**: Configurado para domínio principal
-- ✅ **SSL**: Let's Encrypt automático para todos os domínios
 - ✅ **Firewall**: UFW configurado
 - ✅ **Backup**: Sistema automático
 - ✅ **Monitoramento**: Logs e health checks
 - ✅ **Segurança**: Fail2ban e configurações de segurança
+
+**O que o setup-ssl.sh faz (OPCIONAL):**
+- ✅ **SSL**: Let's Encrypt para domínio principal
+- ✅ **Traefik SSL**: Configura Traefik para usar portas 80/443 com SSL
+- ✅ **Subdomínios SSL**: SSL automático para todos os subdomínios
 
 ### **🌐 Passo 4: Verificar configuração da VPS para PRODUÇÃO**
 ```bash
@@ -139,13 +152,13 @@ sudo systemctl status docker
 docker ps
 
 # Acessar domínio principal
-curl -I https://SEU_DOMINIO.com
+curl -I http://SEU_DOMINIO.com
 
 # Acessar Portainer (interface web)
-curl -I https://portainer.SEU_DOMINIO.com
+curl -I http://portainer.SEU_DOMINIO.com
 
 # Acessar Traefik Dashboard
-curl -I https://traefik.SEU_DOMINIO.com
+curl -I http://traefik.SEU_DOMINIO.com
 ```
 
 ### **👥 Passo 5: Criar clientes (subdomains)**
