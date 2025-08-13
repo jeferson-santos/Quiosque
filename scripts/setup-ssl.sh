@@ -24,7 +24,7 @@ log_color() {
 
 # Função para mostrar ajuda
 show_help() {
-    echo "🔒 Script para Configuração de SSL APENAS"
+    echo "🔒 Script para Configuração de SSL"
     echo "========================================="
     echo
     echo "Uso: $0 [OPÇÕES]"
