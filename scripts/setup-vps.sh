@@ -169,11 +169,11 @@ clone_repository() {
     log_color $BLUE "📁 Clonando repositório automaticamente..."
     
     # Verificar se o repositório já existe
-    if [ -d "/opt/quiosque/Quiosque" ]; then
-        log_color $YELLOW "⚠️ Repositório já existe em /opt/quiosque/Quiosque"
+    if [ -d "/opt/quiosque" ] && [ -d "/opt/quiosque/.git" ]; then
+        log_color $YELLOW "⚠️ Repositório já existe em /opt/quiosque"
         log_color $BLUE "🔄 Atualizando repositório existente..."
         
-        cd /opt/quiosque/Quiosque
+        cd /opt/quiosque
         git pull origin main
         
         log_color $GREEN "✅ Repositório atualizado"
@@ -181,8 +181,8 @@ clone_repository() {
         # Clonar repositório
         log_color $BLUE "📥 Clonando repositório do GitHub..."
         
-        cd /opt/quiosque
-        git clone https://github.com/jeferson-santos/quiosque.git Quiosque
+        cd /opt
+        git clone https://github.com/jeferson-santos/quiosque.git quiosque
         
         if [ $? -eq 0 ]; then
             log_color $GREEN "✅ Repositório clonado com sucesso!"
@@ -194,11 +194,11 @@ clone_repository() {
     fi
     
     # Dar permissões de execução aos scripts
-    chmod +x /opt/quiosque/Quiosque/*.sh
-    chmod +x /opt/quiosque/Quiosque/scripts/*.sh
+    chmod +x /opt/quiosque/*.sh
+    chmod +x /opt/quiosque/scripts/*.sh
     
     # Definir permissões de propriedade
-    chown -R quiosque:quiosque /opt/quiosque/Quiosque
+    chown -R quiosque:quiosque /opt/quiosque
     
     log_color $GREEN "✅ Permissões configuradas"
 }
@@ -306,6 +306,9 @@ setup_nginx_clean() {
     
     log_color $BLUE "🌐 Configurando Nginx com arquitetura limpa..."
     
+    # IMPORTANTE: NÃO criar configuração SSL aqui - o Certbot já fez isso!
+    # Apenas criar uma configuração básica para o domínio principal
+    
     # Criar configuração principal do nginx APENAS para o domínio principal
     cat > "/etc/nginx/sites-available/default" << EOF
 # ========================================
@@ -315,6 +318,7 @@ setup_nginx_clean() {
 # Data: $(date)
 # Domínio: ${domain}
 # ARQUITETURA: Cada subdomain terá seu próprio arquivo
+# SSL: Configurado automaticamente pelo Certbot
 
 # Servidor HTTP - Redirecionar para HTTPS
 server {
@@ -329,73 +333,8 @@ server {
     return 301 https://\$server_name\$request_uri;
 }
 
-# Servidor HTTPS - Domínio principal
-server {
-    listen 443 ssl http2;
-    server_name ${domain} www.${domain};
-    
-    # Página de boas-vindas do sistema
-    location / {
-        return 200 "🚀 Sistema de Quiosques - ${domain}
-
-✅ VPS configurada com sucesso!
-✅ Docker, Nginx e SSL funcionando
-✅ Use create-and-deploy.sh para criar clientes
-✅ Cada cliente terá seu próprio subdomain
-
-📋 Para criar um cliente:
-   ./create-and-deploy.sh -n 'Nome' -i 'id' -d '${domain}' -e 'email@exemplo.com'
-
-🌐 Subdomains serão criados automaticamente como:
-   • cliente1.${domain}
-   • cliente2.${domain}
-   • etc.
-
-🔧 Sistema gerenciado por: create-and-deploy.sh";
-        
-        add_header Content-Type text/plain;
-        add_header Cache-Control "no-cache, no-store, must-revalidate";
-    }
-    
-    # Health check do domínio principal
-    location /health {
-        access_log off;
-        return 200 "OK - Domínio principal funcionando";
-        add_header Content-Type text/plain;
-    }
-    
-    # Status do nginx (apenas localhost)
-    location /nginx_status {
-        stub_status on;
-        access_log off;
-        allow 127.0.0.1;
-        deny all;
-    }
-    
-    # Logs específicos do domínio principal
-    access_log /var/log/nginx/${domain}.access.log;
-    error_log /var/log/nginx/${domain}.error.log;
-}
-
-# Configuração para HTTPS (quando configurado)
-server {
-    listen 443 ssl http2;
-    server_name _;
-    
-    # SSL configurado pelo Certbot
-    # ssl_certificate /etc/letsencrypt/live/${domain}/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
-    
-    # Redirecionar HTTP para HTTPS
-    if (\$scheme != "https") {
-        return 301 https://\$host\$request_uri;
-    }
-    
-    # Padrão HTTPS
-    location / {
-        return 404 "Subdomínio não configurado. Use o script create-and-deploy.sh para configurar.";
-    }
-}
+# NOTA: O Certbot já criou a configuração SSL para este domínio
+# Não duplicar aqui para evitar conflitos
 
 # ========================================
 # NOTAS IMPORTANTES:
@@ -407,6 +346,7 @@ server {
 # 4. As portas são configuradas automaticamente baseadas nos arquivos .env
 # 5. NÃO edite este arquivo manualmente - suas alterações serão sobrescritas
 # 6. Para personalizar, modifique o script setup-vps.sh
+# 7. SSL é gerenciado pelo Certbot automaticamente
 #
 # ========================================
 EOF
@@ -419,7 +359,7 @@ EOF
         systemctl reload nginx
         log_color $GREEN "✅ Nginx configurado com arquitetura limpa"
     else
-        log_color $RED "❌ Erro na configuração do Nginx para subdomínios"
+        log_color $RED "❌ Erro na configuração do Nginx"
         exit 1
     fi
 }
@@ -473,19 +413,19 @@ BACKUP_NAME="quiosque_backup_$DATE"
 # Criar diretório de backup
 mkdir -p "$BACKUP_DIR/$BACKUP_NAME"
 
-# Backup dos containers Docker
-cd /opt/quiosque/Quiosque
-docker compose -f docker-compose.*.yml ps -q | while read container; do
-    docker commit "$container" "backup_$container:$DATE"
-done
+    # Backup dos containers Docker
+    cd /opt/quiosque
+    docker compose -f docker-compose.*.yml ps -q | while read container; do
+        docker commit "$container" "backup_$container:$DATE"
+    done
 
-# Backup dos volumes Docker
-docker run --rm -v quiosque_postgres_data:/data -v "$BACKUP_DIR/$BACKUP_NAME":/backup alpine tar czf /backup/postgres_data.tar.gz -C /data . 2>/dev/null || true
-docker run --rm -v quiosque_redis_data:/data -v "$BACKUP_DIR/$BACKUP_NAME":/backup alpine tar czf /backup/redis_data.tar.gz -C /data . 2>/dev/null || true
+    # Backup dos volumes Docker
+    docker run --rm -v quiosque_postgres_data:/data -v "$BACKUP_DIR/$BACKUP_NAME":/backup alpine tar czf /backup/postgres_data.tar.gz -C /data . 2>/dev/null || true
+    docker run --rm -v quiosque_redis_data:/data -v "$BACKUP_DIR/$BACKUP_NAME":/backup alpine tar czf /backup/redis_data.tar.gz -C /data . 2>/dev/null || true
 
-# Backup dos arquivos de configuração
-cp -r /opt/quiosque/Quiosque/.env* "$BACKUP_DIR/$BACKUP_NAME/" 2>/dev/null || true
-cp -r /opt/quiosque/Quiosque/docker-compose.*.yml "$BACKUP_DIR/$BACKUP_NAME/" 2>/dev/null || true
+    # Backup dos arquivos de configuração
+    cp -r /opt/quiosque/.env* "$BACKUP_DIR/$BACKUP_NAME/" 2>/dev/null || true
+    cp -r /opt/quiosque/docker-compose.*.yml "$BACKUP_DIR/$BACKUP_NAME/" 2>/dev/null || true
 
 # Backup dos certificados SSL
 cp -r /etc/letsencrypt "$BACKUP_DIR/$BACKUP_NAME/"
@@ -546,9 +486,9 @@ backup_client_database() {
     fi
 }
 
-# Encontrar todos os clientes ativos
-cd /opt/quiosque/Quiosque
-for compose_file in docker-compose.*.yml; do
+       # Encontrar todos os clientes ativos
+       cd /opt/quiosque
+       for compose_file in docker-compose.*.yml; do
     if [[ -f "$compose_file" ]]; then
         # Extrair client_id do nome do arquivo
         client_id=$(echo "$compose_file" | sed 's/docker-compose\.\(.*\)\.yml/\1/')
