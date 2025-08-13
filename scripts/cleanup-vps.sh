@@ -189,21 +189,40 @@ cleanup_docker() {
 
 # Função para limpar Nginx
 cleanup_nginx() {
-    log_color $BLUE "🌐 Iniciando limpeza do Nginx..."
+    log_color $BLUE "🌐 Iniciando limpeza COMPLETA do Nginx..."
     
     # Parar Nginx
     log_color $BLUE "🛑 Parando Nginx..."
     systemctl stop nginx 2>/dev/null || true
     log_color $GREEN "   ✅ Nginx parado"
     
-    # Remover todas as configurações de sites
-    log_color $BLUE "🗑️ Removendo configurações de sites..."
+    # Remover TODAS as configurações de sites
+    log_color $BLUE "🗑️ Removendo TODAS as configurações de sites..."
     rm -rf /etc/nginx/sites-available/* 2>/dev/null || true
     rm -rf /etc/nginx/sites-enabled/* 2>/dev/null || true
     log_color $GREEN "   ✅ Configurações de sites removidas"
     
-    # Restaurar configuração padrão do Nginx
-    log_color $BLUE "🔄 Restaurando configuração padrão do Nginx..."
+    # Remover certificados SSL COMPLETAMENTE
+    log_color $BLUE "🗑️ Removendo TODOS os certificados SSL..."
+    if [ -d "/etc/letsencrypt" ]; then
+        rm -rf /etc/letsencrypt/* 2>/dev/null || true
+        log_color $GREEN "   ✅ Certificados SSL removidos completamente"
+    else
+        log_color $BLUE "   ℹ️ Nenhum certificado SSL encontrado"
+    fi
+    
+    # Remover logs do Nginx
+    log_color $BLUE "🗑️ Removendo logs do Nginx..."
+    rm -f /var/log/nginx/*.log 2>/dev/null || true
+    log_color $GREEN "   ✅ Logs removidos"
+    
+    # Remover arquivos de configuração customizados
+    log_color $BLUE "🗑️ Removendo configurações customizadas..."
+    rm -f /etc/nginx/conf.d/*.conf 2>/dev/null || true
+    log_color $GREEN "   ✅ Configurações customizadas removidas"
+    
+    # Restaurar configuração PADRÃO do Ubuntu
+    log_color $BLUE "🔄 Restaurando configuração PADRÃO do Ubuntu..."
     cat > /etc/nginx/sites-available/default << 'EOF'
 server {
     listen 80 default_server;
@@ -217,21 +236,6 @@ EOF
     # Habilitar site padrão
     ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
     log_color $GREEN "   ✅ Site padrão habilitado"
-    
-    # Remover certificados SSL
-    log_color $BLUE "🗑️ Removendo certificados SSL..."
-    if [ -d "/etc/letsencrypt" ]; then
-        rm -rf /etc/letsencrypt/live/* 2>/dev/null || true
-        rm -rf /etc/letsencrypt/archive/* 2>/dev/null || true
-        log_color $GREEN "   ✅ Certificados SSL removidos"
-    else
-        log_color $BLUE "   ℹ️ Nenhum certificado SSL encontrado"
-    fi
-    
-    # Remover logs do Nginx
-    log_color $BLUE "🗑️ Removendo logs do Nginx..."
-    rm -f /var/log/nginx/*.log 2>/dev/null || true
-    log_color $GREEN "   ✅ Logs removidos"
     
     # Testar configuração
     log_color $BLUE "🔧 Testando configuração do Nginx..."
@@ -247,16 +251,16 @@ EOF
         return 1
     fi
     
-    log_color $GREEN "✅ Limpeza do Nginx concluída!"
+    log_color $GREEN "✅ Limpeza COMPLETA do Nginx concluída!"
 }
 
 # Função para limpar arquivos do sistema
 cleanup_system_files() {
     log_color $BLUE "🗂️ Iniciando limpeza de arquivos do sistema..."
     
-    # Remover arquivos do projeto
+    # Remover arquivos do projeto em /home/quiosque
     if [ -d "/home/quiosque" ]; then
-        log_color $BLUE "🗑️ Removendo arquivos do projeto..."
+        log_color $BLUE "🗑️ Removendo arquivos do projeto em /home/quiosque..."
         cd /home/quiosque
         
         # Remover arquivos docker-compose
@@ -274,6 +278,32 @@ cleanup_system_files() {
         log_color $GREEN "   ✅ Arquivos do projeto removidos"
     else
         log_color $BLUE "   ℹ️ Diretório /home/quiosque não encontrado"
+    fi
+    
+    # Remover arquivos do projeto em /opt/quiosque
+    if [ -d "/opt/quiosque" ]; then
+        log_color $BLUE "🗑️ Removendo arquivos do projeto em /opt/quiosque..."
+        cd /opt/quiosque
+        
+        # Remover arquivos docker-compose
+        rm -f docker-compose.*.yml 2>/dev/null || true
+        log_color $GREEN "   ✅ Arquivos docker-compose removidos"
+        
+        # Remover arquivos .env
+        rm -f .env* 2>/dev/null || true
+        log_color $GREEN "   ✅ Arquivos .env removidos"
+        
+        # Remover logs
+        rm -rf logs/* 2>/dev/null || true
+        log_color $GREEN "   ✅ Logs removidos"
+        
+        # Remover backups
+        rm -rf backups/* 2>/dev/null || true
+        log_color $GREEN "   ✅ Backups removidos"
+        
+        log_color $GREEN "   ✅ Arquivos do projeto em /opt/quiosque removidos"
+    else
+        log_color $BLUE "   ℹ️ Diretório /opt/quiosque não encontrado"
     fi
     
     log_color $GREEN "✅ Limpeza de arquivos do sistema concluída!"
