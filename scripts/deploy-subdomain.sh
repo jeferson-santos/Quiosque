@@ -205,7 +205,7 @@ check_client_status() {
     
     if [ -f "$compose_file" ]; then
         # Verificar se os containers estão rodando
-        if docker-compose -f "$compose_file" ps | grep -q "Up"; then
+        if docker compose -f "$compose_file" ps | grep -q "Up"; then
             log_color $GREEN "✅ Cliente ${subdomain} está rodando"
             return 0
         else

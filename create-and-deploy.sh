@@ -265,15 +265,15 @@ deploy_client() {
     
     # Parar serviços existentes (se houver)
     log_color $BLUE "🛑 Parando serviços existentes..."
-    docker-compose -f "$compose_file" down 2>/dev/null || true
+    docker compose -f "$compose_file" down 2>/dev/null || true
     
     # Build das imagens
     log_color $BLUE "🔨 Fazendo build das imagens..."
-    docker-compose -f "$compose_file" build
+    docker compose -f "$compose_file" build
     
     # Subir serviços
     log_color $BLUE "🚀 Subindo serviços..."
-    docker-compose -f "$compose_file" up -d
+    docker compose -f "$compose_file" up -d
     
     # Aguardar serviços estarem prontos
     log_color $BLUE "⏳ Aguardando serviços estarem prontos..."
@@ -281,7 +281,7 @@ deploy_client() {
     
     # Verificar status
     log_color $BLUE "📊 Verificando status dos serviços..."
-    docker-compose -f "$compose_file" ps
+    docker compose -f "$compose_file" ps
     
     log_color $GREEN "🎉 Deploy concluído para cliente: $client_name"
     log_color $BLUE "🌐 Frontend: http://localhost:\${FRONTEND_PORT:-80}"
@@ -347,10 +347,10 @@ show_summary() {
     
     echo
     log_color $BLUE "🚀 Para gerenciar o cliente:"
-    log_color $BLUE "   • Ver status: docker-compose -f docker-compose.$client_id.yml ps"
-    log_color $BLUE "   • Ver logs: docker-compose -f docker-compose.$client_id.yml logs -f"
-    log_color $BLUE "   • Parar: docker-compose -f docker-compose.$client_id.yml down"
-    log_color $BLUE "   • Reiniciar: docker-compose -f docker-compose.$client_id.yml restart"
+    log_color $BLUE "   • Ver status: docker compose -f docker-compose.$client_id.yml ps"
+    log_color $BLUE "   • Ver logs: docker compose -f docker-compose.$client_id.yml logs -f"
+    log_color $BLUE "   • Parar: docker compose -f docker-compose.$client_id.yml down"
+    log_color $BLUE "   • Reiniciar: docker compose -f docker-compose.$client_id.yml restart"
     
     echo
     log_color $YELLOW "⚠️ IMPORTANTE:"

@@ -39,6 +39,10 @@ show_help() {
     echo "  $0 -d meudominio.com -e 'admin@meudominio.com'"
     echo "  $0 -d meudominio.com -e 'admin@meudominio.com' -t"
     echo
+    echo "PRÉ-REQUISITOS:"
+    echo "  1. Clone o repositório: git clone <seu-repositorio> /opt/quiosque/Quiosque"
+    echo "  2. Execute este script como root: sudo $0 -d DOMAIN -e EMAIL"
+    echo
 }
 
 # Função para verificar pré-requisitos
@@ -151,23 +155,29 @@ setup_directories() {
     log_color $GREEN "✅ Diretórios configurados"
 }
 
-# Função para clonar repositório
-clone_repository() {
-    log_color $BLUE "📥 Clonando repositório..."
+# Função para verificar repositório
+check_repository() {
+    log_color $BLUE "📁 Verificando repositório..."
     
-    cd /opt/quiosque
+    # Verificar se o repositório já existe
+    if [ ! -d "/opt/quiosque/Quiosque" ]; then
+        log_color $YELLOW "⚠️ Repositório não encontrado em /opt/quiosque/Quiosque"
+        log_color $YELLOW "⚠️ Execute manualmente: git clone <seu-repositorio> /opt/quiosque/Quiosque"
+        log_color $YELLOW "⚠️ Depois execute este script novamente"
+        exit 1
+    fi
     
-    # Clonar repositório (ajuste a URL conforme necessário)
-    if [ ! -d "Quiosque" ]; then
-        su - quiosque -c "cd /opt/quiosque && git clone https://github.com/jeferson-santos/Quiosque.git"
-    else
-        su - quiosque -c "cd /opt/quiosque/Quiosque && git pull origin main"
+    # Verificar se é um repositório git válido
+    if [ ! -d "/opt/quiosque/Quiosque/.git" ]; then
+        log_color $RED "❌ Diretório /opt/quiosque/Quiosque não é um repositório git válido!"
+        log_color $RED "❌ Clone o repositório manualmente antes de executar este script"
+        exit 1
     fi
     
     # Definir permissões
     chown -R quiosque:quiosque /opt/quiosque/Quiosque
     
-    log_color $GREEN "✅ Repositório clonado/atualizado"
+    log_color $GREEN "✅ Repositório verificado e permissões configuradas"
 }
 
 # Função para configurar Nginx para domínio principal
@@ -318,7 +328,7 @@ mkdir -p "$BACKUP_DIR/$BACKUP_NAME"
 
 # Backup dos containers Docker
 cd /opt/quiosque/Quiosque
-docker-compose -f docker-compose.*.yml ps -q | while read container; do
+docker compose -f docker-compose.*.yml ps -q | while read container; do
     docker commit "$container" "backup_$container:$DATE"
 done
 
@@ -373,7 +383,7 @@ echo "[$DATE] Iniciando verificação de status..." >> "$LOG_FILE"
 
 # Verificar status dos containers
 cd /opt/quiosque/Quiosque
-docker-compose -f docker-compose.*.yml ps >> "$LOG_FILE" 2>&1
+docker compose -f docker-compose.*.yml ps >> "$LOG_FILE" 2>&1
 
 # Verificar uso de disco
 df -h >> "$LOG_FILE" 2>&1
@@ -455,9 +465,10 @@ show_summary() {
     
     echo
     log_color $GREEN "📚 PRÓXIMOS PASSOS:"
-    log_color $GREEN "1. Use o script create-and-deploy.sh para criar restaurantes"
-    log_color $GREEN "2. Cada restaurante será configurado automaticamente"
-    log_color $GREEN "3. SSL será configurado para cada subdomínio"
+    log_color $GREEN "1. Clone o repositório: git clone <seu-repositorio> /opt/quiosque/Quiosque"
+    log_color $GREEN "2. Use o script create-and-deploy.sh para criar restaurantes"
+    log_color $GREEN "3. Cada restaurante será configurado automaticamente"
+    log_color $GREEN "4. SSL será configurado para cada subdomínio"
     
     echo
     log_color $GREEN "🎯 VPS PRONTA PARA DEPLOY DE SUBDOMÍNIOS!"
@@ -541,7 +552,7 @@ main() {
     install_docker
     create_app_user
     setup_directories
-    clone_repository
+    check_repository
     setup_nginx_main_domain "$DOMAIN"
     setup_ssl_main_domain "$DOMAIN" "$EMAIL" "$TEST_MODE"
     setup_backup
