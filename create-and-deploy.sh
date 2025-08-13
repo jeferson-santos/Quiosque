@@ -27,13 +27,13 @@ check_port_available() {
     
     # Verificar se a porta está em uso
     if command -v netstat >/dev/null 2>&1; then
-        if netstat -tln 2>/dev/null | grep -q ":$port "; then
+        if netstat -tln 2>/dev/null | grep -q ":$port " 2>/dev/null; then
             return 1  # Porta ocupada
         else
             return 0  # Porta livre
         fi
     elif command -v ss >/dev/null 2>&1; then
-        if ss -tln 2>/dev/null | grep -q ":$port "; then
+        if ss -tln 2>/dev/null | grep -q ":$port " 2>/dev/null; then
             return 1  # Porta ocupada
         else
             return 0  # Porta livre
@@ -55,6 +55,12 @@ find_available_port() {
     
     log_color $BLUE "      Testando porta $port..."
     
+    # Debug: verificar se check_port_available funciona
+    local check_result
+    check_port_available $port
+    check_result=$?
+    log_color $BLUE "      Debug: check_port_available($port) retornou $check_result"
+    
     while ! check_port_available $port; do
         log_color $YELLOW "      ⚠️ Porta $port está ocupada, tentando próxima..."
         port=$((port + 1))
@@ -66,6 +72,11 @@ find_available_port() {
         fi
         
         log_color $BLUE "      Testando porta $port..."
+        
+        # Debug: verificar resultado novamente
+        check_port_available $port
+        check_result=$?
+        log_color $BLUE "      Debug: check_port_available($port) retornou $check_result"
     done
     
     log_color $GREEN "      ✅ Porta $port está disponível!"
@@ -163,6 +174,7 @@ configure_available_ports() {
     # Verificar porta do frontend (padrão: 80)
     log_color $BLUE "   Verificando porta 80 (frontend)..."
     local frontend_port=$(find_available_port 80)
+    log_color $BLUE "   Debug: frontend_port = $frontend_port"
     if [ $frontend_port -ne 80 ]; then
         log_color $YELLOW "⚠️ Porta 80 ocupada, usando porta $frontend_port para frontend"
     else
