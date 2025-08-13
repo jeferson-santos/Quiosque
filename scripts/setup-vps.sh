@@ -198,8 +198,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.portainer.rule=Host(\`portainer.${domain}\`)"
-      - "traefik.http.routers.portainer.entrypoints=websecure"
-      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.portainer.entrypoints=web"
       - "traefik.http.services.portainer.loadbalancer.server.port=9000"
 
 volumes:
@@ -231,14 +230,14 @@ setup_traefik() {
     local domain="$1"
     local email="$2"
     
-    log_color $BLUE "🌐 Configurando Traefik (proxy reverso com SSL automático)..."
+    log_color $BLUE "🌐 Configurando Traefik (proxy reverso HTTP por enquanto)..."
     
     # Criar diretório para Traefik
     mkdir -p /opt/quiosque/traefik
     mkdir -p /opt/quiosque/traefik/certs
     mkdir -p /opt/quiosque/traefik/config
     
-    # Criar configuração do Traefik
+    # Criar configuração do Traefik (HTTP apenas por enquanto)
     cat > "/opt/quiosque/traefik/traefik.yml" << EOF
 global:
   checkNewVersion: false
@@ -247,12 +246,7 @@ global:
 entryPoints:
   web:
     address: ":8081"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-          permanent: true
+    # Removido redirecionamento para HTTPS temporariamente
   
   websecure:
     address: ":8444"
@@ -263,13 +257,14 @@ providers:
     exposedByDefault: false
     network: traefik_network
 
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: ${email}
-      storage: /certs/acme.json
-      httpChallenge:
-        entryPoint: web
+# SSL desabilitado temporariamente até DNS estar configurado
+# certificatesResolvers:
+#   letsencrypt:
+#     acme:
+#       email: ${email}
+#       storage: /certs/acme.json
+#       httpChallenge:
+#         entryPoint: web
 
 api:
   dashboard: true
@@ -313,8 +308,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.traefik.rule=Host(\`traefik.${domain}\`)"
-      - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.entrypoints=web"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.middlewares=auth"
       - "traefik.http.middlewares.auth.basicauth.users=admin:\$\$2y\$\$10\$\$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi"
@@ -334,7 +328,7 @@ EOF
     chown -R quiosque:quiosque /opt/quiosque/traefik
     chmod +x /opt/quiosque/traefik/docker-compose.yml
     
-    log_color $GREEN "✅ Traefik configurado"
+    log_color $GREEN "✅ Traefik configurado (HTTP por enquanto - SSL será configurado depois)"
 }
 
 # Função para configurar Nginx para domínio principal
@@ -403,16 +397,17 @@ EOF
         
         <div class="info">
             <h3>🔧 Ferramentas Disponíveis</h3>
-            <p>• <strong>Portainer:</strong> <a href="http://portainer.${domain}" target="_blank">http://portainer.${domain}</a></p>
-            <p>• <strong>Traefik Dashboard:</strong> <a href="http://traefik.${domain}" target="_blank">http://traefik.${domain}</a></p>
+            <p>• <strong>Portainer:</strong> <a href="http://portainer.${domain}" target="_blank">http://portainer.${domain}</a> (HTTP por enquanto)</p>
+            <p>• <strong>Traefik Dashboard:</strong> <a href="http://traefik.${domain}" target="_blank">http://traefik.${domain}</a> (HTTP por enquanto)</p>
             <p>• <strong>Traefik Portas:</strong> 8081 (HTTP) / 8444 (HTTPS)</p>
         </div>
         
         <div class="info">
             <h3>🔧 Próximos Passos</h3>
-            <p>1. Use o script create-and-deploy.sh para criar restaurantes</p>
-            <p>2. Cada restaurante será configurado automaticamente</p>
-            <p>3. SSL será configurado para cada subdomínio</p>
+            <p>1. Configure os registros DNS para os subdomínios (traefik.${domain}, portainer.${domain})</p>
+            <p>2. Execute o script setup-ssl.sh para configurar SSL</p>
+            <p>3. Use o script create-and-deploy.sh para criar restaurantes</p>
+            <p>4. Cada restaurante será configurado automaticamente</p>
         </div>
         
         <div class="footer">
@@ -639,63 +634,29 @@ show_summary() {
     local email="$2"
     local test_mode="$3"
     
-    log_color $GREEN "🎉 CONFIGURAÇÃO COMPLETA DA VPS PARA PRODUÇÃO CONCLUÍDA!"
-    log_color $GREEN "========================================================="
-    
+    log_color $GREEN "🎉 VPS configurada com sucesso!"
+    log_color $BLUE "=================================="
+    log_color $YELLOW "📋 Resumo da configuração:"
+    log_color $BLUE "   • Docker e Docker Compose instalados"
+    log_color $BLUE "   • Nginx configurado para ${domain}"
+    log_color $BLUE "   • Traefik configurado (HTTP por enquanto)"
+    log_color $BLUE "   • Portainer configurado (HTTP por enquanto)"
+    log_color $BLUE "   • Backup automático configurado"
+    log_color $BLUE "   • Monitoramento configurado"
+    log_color $BLUE "   • Firewall e segurança configurados"
     echo
-    log_color $BLUE "📋 RESUMO DA CONFIGURAÇÃO:"
-    log_color $BLUE "   ✅ VPS Ubuntu configurada para produção"
-    log_color $BLUE "   ✅ Docker e Docker Compose instalados"
-    log_color $BLUE "   ✅ Nginx configurado para domínio principal"
-    log_color $BLUE "   ✅ Traefik configurado (proxy reverso com SSL automático)"
-    log_color $BLUE "   ✅ Portainer configurado e rodando"
-    log_color $BLUE "   ✅ SSL/HTTPS configurado para domínio principal"
-    log_color $BLUE "   ✅ Backup automático configurado"
-    log_color $BLUE "   ✅ Monitoramento configurado"
-    
+    log_color $YELLOW "🔧 Próximos passos:"
+    log_color $BLUE "   1. Configure os registros DNS para os subdomínios"
+    log_color $BLUE "   2. Execute: sudo ./scripts/setup-ssl.sh para configurar SSL"
+    log_color $BLUE "   3. Use: sudo ./scripts/create-and-deploy.sh para criar restaurantes"
     echo
-    log_color $BLUE "🌐 URLs DE ACESSO:"
-    log_color $BLUE "   • Domínio principal: http://${domain}"
-    log_color $BLUE "   • www: http://www.${domain}"
-    log_color $BLUE "   • Portainer: http://portainer.${domain}"
-    log_color $BLUE "   • Traefik Dashboard: http://traefik.${domain}"
-    
+    log_color $GREEN "🌐 URLs disponíveis:"
+    log_color $BLUE "   • Site principal: https://${domain}"
+    log_color $BLUE "   • Portainer: http://portainer.${domain} (usuário: admin, senha: password)"
+    log_color $BLUE "   • Traefik Dashboard: http://traefik.${domain} (usuário: admin, senha: password)"
     echo
-    log_color $BLUE "🔧 PORTAS DOS SERVIÇOS:"
-    log_color $BLUE "   • Nginx: 80 (domínio principal)"
-    log_color $BLUE "   • Traefik: 8081/8444 (proxy reverso)"
-    log_color $BLUE "   • Portainer: 9000 (via Traefik)"
-    
-    echo
-    log_color $BLUE "🔧 COMANDOS ÚTEIS:"
-    log_color $BLUE "   • Ver status: docker ps"
-    log_color $BLUE "   • Ver logs: docker logs <container>"
-    log_color $BLUE "   • Backup manual: /opt/quiosque/backup.sh"
-    log_color $BLUE "   • Monitoramento: /opt/quiosque/monitor.sh"
-    log_color $BLUE "   • Ver certificados: certbot certificates"
-    log_color $BLUE "   • Ver crontab: crontab -l"
-    
-    echo
-    log_color $YELLOW "⚠️ IMPORTANTE:"
-    log_color $YELLOW "   • Configure os registros DNS para apontar para esta VPS"
-    log_color $YELLOW "   • Teste o domínio principal via HTTPS"
-    log_color $YELLOW "   • Monitore os logs em /var/log/quiosque_*.log"
-    log_color $YELLOW "   • Backup geral executado diariamente às 2h"
-    log_color $YELLOW "   • Monitoramento executado a cada 5 minutos"
-    log_color $YELLOW "   • Portainer e Traefik rodando em containers Docker"
-    
-    echo
-    log_color $GREEN "📚 PRÓXIMOS PASSOS:"
-    log_color $GREEN "1. ✅ Ambiente base configurado e pronto"
-    log_color $GREEN "2. Use o script create-and-deploy.sh para criar restaurantes"
-    log_color $GREEN "3. Cada restaurante será configurado automaticamente no Traefik"
-    log_color $GREEN "4. Gerencie containers via Portainer: http://portainer.${domain}"
-    log_color $GREEN "5. Para SSL, execute: sudo ./scripts/setup-ssl.sh -d ${domain} -e ${email}"
-    
-    echo
-    log_color $GREEN "🎯 VPS PRONTA PARA PRODUÇÃO!"
-    log_color $GREEN "🌐 Traefik gerenciando SSL automaticamente!"
-    log_color $GREEN "🐳 Portainer rodando em HTTPS!"
+    log_color $YELLOW "⚠️ IMPORTANTE: SSL será configurado depois com setup-ssl.sh"
+    log_color $YELLOW "⚠️ Configure primeiro os registros DNS para os subdomínios"
 }
 
 # Função principal

@@ -232,6 +232,141 @@ EOF
     log_color $GREEN "✅ Traefik configurado com SSL"
 }
 
+# Função para reativar HTTPS nos subdomínios
+reactivate_https_subdomains() {
+    local domain="$1"
+    local email="$2"
+    
+    log_color $BLUE "🔒 Reativando HTTPS nos subdomínios..."
+    
+    # Atualizar configuração do Portainer para usar HTTPS
+    cd /opt/quiosque/portainer
+    
+    # Parar Portainer
+    docker compose down
+    
+    # Atualizar docker-compose do Portainer para usar HTTPS
+    cat > "/opt/quiosque/portainer/docker-compose.yml" << EOF
+version: '3.8'
+
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer_data:/data
+    networks:
+      - portainer_network
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(\`portainer.${domain}\`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+volumes:
+  portainer_data:
+
+networks:
+  portainer_network:
+    external: true
+  traefik_network:
+    external: true
+EOF
+
+    # Iniciar Portainer com HTTPS
+    docker compose up -d
+    
+    # Aguardar Portainer iniciar
+    sleep 10
+    
+    # Verificar se Portainer está rodando
+    if docker ps | grep -q portainer; then
+        log_color $GREEN "✅ Portainer reativado com HTTPS"
+    else
+        log_color $RED "❌ Erro ao reativar Portainer"
+        return 1
+    fi
+    
+    # Atualizar configuração do Traefik para forçar HTTPS
+    cd /opt/quiosque/traefik
+    
+    # Parar Traefik
+    docker compose down
+    
+    # Atualizar traefik.yml para forçar HTTPS
+    cat > "/opt/quiosque/traefik/traefik.yml" << EOF
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik_network
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: ${email}
+      storage: /certs/acme.json
+      httpChallenge:
+        entryPoint: web
+
+api:
+  dashboard: true
+  insecure: false
+
+log:
+  level: INFO
+
+accessLog:
+  filePath: "/logs/access.log"
+  format: json
+
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+EOF
+
+    # Iniciar Traefik com HTTPS forçado
+    docker compose up -d
+    
+    # Aguardar Traefik iniciar
+    sleep 15
+    
+    # Verificar se Traefik está rodando
+    if docker ps | grep -q traefik; then
+        log_color $GREEN "✅ Traefik reativado com HTTPS forçado"
+    else
+        log_color $RED "❌ Erro ao reativar Traefik"
+        return 1
+    fi
+    
+    log_color $GREEN "✅ HTTPS reativado em todos os subdomínios"
+}
+
 # Função para mostrar resumo final
 show_summary() {
     local domain="$1"
@@ -244,8 +379,9 @@ show_summary() {
     log_color $BLUE "📋 RESUMO DA CONFIGURAÇÃO SSL:"
     log_color $BLUE "   ✅ SSL configurado para domínio principal"
     log_color $BLUE "   ✅ Traefik configurado com SSL nas portas 80/443"
-    log_color $BLUE "   ✅ Portainer funcionando com SSL"
-    log_color $BLUE "   ✅ Traefik Dashboard funcionando com SSL"
+    log_color $BLUE "   ✅ Portainer reativado com HTTPS"
+    log_color $BLUE "   ✅ Traefik Dashboard reativado com HTTPS"
+    log_color $BLUE "   ✅ Redirecionamento HTTP→HTTPS ativado"
     
     echo
     log_color $BLUE "🌐 URLs DE ACESSO (AGORA COM HTTPS):"
@@ -264,10 +400,12 @@ show_summary() {
     log_color $YELLOW "   • Traefik agora gerencia as portas 80/443"
     log_color $YELLOW "   • Nginx está rodando mas não usa essas portas"
     log_color $YELLOW "   • Todos os subdomínios agora têm SSL automático"
+    log_color $YELLOW "   • Redirecionamento HTTP→HTTPS ativado"
     
     echo
     log_color $GREEN "🎯 SSL CONFIGURADO COM SUCESSO!"
     log_color $GREEN "🌐 Todos os serviços agora rodam em HTTPS!"
+    log_color $GREEN "🔒 Redirecionamento automático HTTP→HTTPS ativado!"
 }
 
 # Função principal
@@ -346,6 +484,7 @@ main() {
     check_prerequisites
     setup_ssl_main_domain "$DOMAIN" "$EMAIL" "$TEST_MODE"
     setup_traefik_ssl "$DOMAIN" "$EMAIL"
+    reactivate_https_subdomains "$DOMAIN" "$EMAIL"
     show_summary "$DOMAIN" "$EMAIL"
 }
 
