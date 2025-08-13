@@ -570,7 +570,7 @@ show_summary() {
     log_color $YELLOW "   • Configure as portas no arquivo .env se necessário"
     
     echo
-    log_color $GREEN "📚 Para deploy em VPS Ubuntu, use: docs/deploy-vps-example.sh"
+    log_color $GREEN "📚 Para deploy em VPS Ubuntu, use: sudo ./scripts/setup-vps.sh -d DOMAIN -e EMAIL"
 }
 
 # Função principal

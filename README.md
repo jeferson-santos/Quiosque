@@ -160,8 +160,8 @@ Quiosque/
 
 ### **2. Deploy em VPS Ubuntu (Produção)**
 ```bash
-# Usar script automatizado para VPS
-./scripts/deploy-vps.sh
+# Setup COMPLETO da VPS (tudo em um!)
+sudo ./scripts/setup-vps.sh -d meudominio.com -e admin@meudominio.com
 ```
 
 ### **3. Configurar domínio e SSL**
