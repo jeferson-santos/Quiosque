@@ -94,19 +94,33 @@ find_port_in_range() {
     local end_port="$2"
     local service_name="$3"
     
-    # Obter portas já em uso pelo Docker
-    local used_ports=$(docker ps --format "{{.Ports}}" 2>/dev/null | grep -oE "[0-9]+->" | cut -d'>' -f1 | sort -u)
+    # Função para verificar se uma porta está em uso
+    is_port_available() {
+        local port="$1"
+        # Usar ss (mais moderno) ou netstat como fallback
+        if command -v ss &> /dev/null; then
+            ss -tuln | grep -q ":$port "
+        elif command -v netstat &> /dev/null; then
+            netstat -tuln | grep -q ":$port "
+        else
+            # Se não tiver nenhum dos dois, assumir que a porta está disponível
+            return 1
+        fi
+    }
     
     # Procurar porta disponível no range
-    for port in $(seq $start_port $end_port); do
-        if ! echo "$used_ports" | grep -q "^$port$"; then
-            log_color $GREEN "   ✅ $service_name: porta $port disponível"
+    local port
+    for port in $(seq "$start_port" "$end_port"); do
+        # Verificar se a porta está disponível
+        if ! is_port_available "$port"; then
+            # IMPORTANTE: NÃO usar log_color aqui para evitar captura de cores ANSI
+            # Apenas retornar a porta limpa
             printf "%d" "$port"
             return 0
         fi
     done
     
-    log_color $RED "   ❌ Nenhuma porta disponível no range $start_port-$end_port para $service_name"
+    # Se não encontrou porta, retornar erro
     return 1
 }
 
@@ -258,17 +272,18 @@ create_docker_compose() {
         exit 1
     fi
     
-    # Salvar portas para uso posterior
-    FRONTEND_PORT_CHOSEN="$frontend_port"
-    BACKEND_PORT_CHOSEN="$backend_port"
-    POSTGRES_PORT_CHOSEN="$postgres_port"
-    REDIS_PORT_CHOSEN="$redis_port"
-    
+    # Log das portas encontradas (APÓS capturar as variáveis)
     log_color $GREEN "🎯 Portas selecionadas:"
     log_color $GREEN "   • Frontend: $frontend_port (range 8000-8999)"
     log_color $GREEN "   • Backend: $backend_port (range 7000-7999)"
     log_color $GREEN "   • PostgreSQL: $postgres_port (range 6000-6999)"
     log_color $GREEN "   • Redis: $redis_port (range 5000-5999)"
+    
+    # Salvar portas para uso posterior
+    FRONTEND_PORT_CHOSEN="$frontend_port"
+    BACKEND_PORT_CHOSEN="$backend_port"
+    POSTGRES_PORT_CHOSEN="$postgres_port"
+    REDIS_PORT_CHOSEN="$redis_port"
     
     # Criar arquivo docker-compose
     cat > "docker-compose.$client_id.yml" << EOF
